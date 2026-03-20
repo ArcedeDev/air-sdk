@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.arcededev/air-sdk",
+  "title": "AIR SDK",
+  "description": "Collective intelligence for browser automation agents. Discover what actions are possible on any website, get verified CSS selectors and execution plans, extract structured data from URLs, and report outcomes to improve the network. Up to 7,000x cost reduction vs LLM DOM reasoning.",
+  "version": "0.2.9",
+  "websiteUrl": "https://agentinternetruntime.com/docs/sdk",
+  "repository": {
+    "url": "https://github.com/ArcedeDev/air-sdk",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@arcede/air-sdk",
+      "version": "0.2.9",
+      "transport": { "type": "stdio" },
+      "runtimeHint": "npx",
+      "arguments": ["--mcp"],
+      "environmentVariables": [
+        {
+          "name": "AIR_API_KEY",
+          "description": "API key from agentinternetruntime.com/dashboard — free tier includes 1,000 executions/month",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
