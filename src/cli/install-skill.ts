@@ -14,7 +14,8 @@ import {
 
 // ============================================================
 // AIR SDK — install-skill
-// Registers the AIR MCP server into Claude Code, Cursor, and Windsurf.
+// Registers the AIR MCP server into Claude Code, Cursor, Windsurf,
+// and OpenClaw.
 //
 // Usage:
 //   npx @arcede/air-sdk install-skill
@@ -142,6 +143,10 @@ function getTargets(): InstallTarget[] {
       name: 'Windsurf',
       configPath: path.join(home, '.codeium', 'windsurf', 'mcp_config.json'),
     },
+    {
+      name: 'OpenClaw',
+      configPath: path.join(home, '.openclaw', 'openclaw.json'),
+    },
   ];
 }
 
@@ -165,10 +170,10 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     --help, -h   Show this help message
 
   ${bold('What it does:')}
-    Auto-detects Claude Code, Cursor, and Windsurf, then writes the
-    MCP server config and injects your API key. Your agent gets 4 new
-    tools: extract_url, browse_capabilities, execute_capability, and
-    report_outcome.
+    Auto-detects Claude Code, Cursor, Windsurf, and OpenClaw, then
+    writes the MCP server config and injects your API key. Your agent
+    gets 4 new tools: extract_url, browse_capabilities,
+    execute_capability, and report_outcome.
 
   ${bold('Docs:')} ${cyan('https://agentinternetruntime.com/docs/sdk')}
 `);

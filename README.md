@@ -82,7 +82,7 @@ npx @arcede/air-sdk init   # saves key to ~/.config/air/credentials.json
 **Agent Skill (recommended for AI coding agents):**
 
 ```bash
-npx @arcede/air-sdk install-skill   # auto-configures Claude Code, Cursor, Windsurf
+npx @arcede/air-sdk install-skill   # auto-configures Claude Code, Cursor, Windsurf, OpenClaw
 ```
 
 Free tier included. No credit card. Make the network smarter, star the repo and share it ⭐
@@ -156,18 +156,10 @@ Give your coding agent site intelligence with one command:
 npx @arcede/air-sdk install-skill
 ```
 
-This auto-detects Claude Code, Cursor, and Windsurf, writes the MCP server config, and injects your API key. Restart your agent and it instantly has new tools.
-
-> **Faster startup:** Install globally to skip the ~60s npx cold start:
-> ```bash
-> npm install -g @arcede/air-sdk
-> claude mcp remove air-sdk
-> claude mcp add air-sdk -e AIR_API_KEY=$AIR_API_KEY -- air-sdk --mcp
-> ```
-> Make sure `AIR_API_KEY` is set in your shell profile (`~/.zshrc` or `~/.bashrc`).
+This auto-detects Claude Code, Cursor, Windsurf, and OpenClaw, writes the MCP server config, and injects your API key. It also installs `@arcede/air-sdk` globally for fast agent startup (~2s instead of ~60s with npx). Restart your agent and it instantly has new tools.
 
 <details>
-<summary>Manual setup (Claude Code, Cursor, Windsurf)</summary>
+<summary>Manual setup (Claude Code, Cursor, Windsurf, OpenClaw)</summary>
 
 **Claude Code:**
 
@@ -190,6 +182,20 @@ claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- npx -y @arcede/air-sdk --
 ```
 
 **Windsurf** — add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "air-sdk": {
+      "command": "npx",
+      "args": ["-y", "@arcede/air-sdk", "--mcp"],
+      "env": { "AIR_API_KEY": "air_xxx" }
+    }
+  }
+}
+```
+
+**OpenClaw** — add to `~/.openclaw/openclaw.json`:
 
 ```json
 {
