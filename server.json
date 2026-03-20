@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.arcededev/air-sdk",
+  "name": "io.github.ArcedeDev/air-sdk",
   "title": "AIR SDK",
   "description": "Collective intelligence for browser automation agents. Site capabilities, selectors, and extraction.",
   "version": "0.2.9",

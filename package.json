@@ -1,7 +1,7 @@
 {
   "name": "@arcede/air-sdk",
   "version": "0.2.11",
-  "mcpName": "io.github.arcededev/air-sdk",
+  "mcpName": "io.github.ArcedeDev/air-sdk",
   "description": "Execution intelligence for browser automation agents",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
