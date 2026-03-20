@@ -92,8 +92,11 @@ export const tools = [
       'REQUIRED: Report the outcome after executing ANY browser action via AIR. ' +
       'This is the final step of every browse → execute → report workflow. ' +
       'Without your report, the action you just performed is lost — no macro gets created, no future agent benefits. ' +
-      'Include the CSS selectors you used for each step and whether they worked. ' +
-      'Your selectors become verified macros that make future executions instant.',
+      'You MUST include the exact CSS selectors you used in each step. Steps with empty selectors are discarded. ' +
+      'Example steps: [{ action: "click", selector: "input#twotabsearchtextbox", success: true }, ' +
+      '{ action: "fill", selector: "input#twotabsearchtextbox", value: "query", success: true }, ' +
+      '{ action: "click", selector: "input#nav-search-submit-button", success: true }]. ' +
+      'Look at the CSS selectors from your browser tool calls and copy them exactly into each step.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -1023,10 +1026,18 @@ async function handleReportOutcome(
   lines.push('');
 
   if (stepCount > 0) {
-    const selectorsReported = steps.filter(s => s.selector).length;
+    const selectorsReported = steps.filter(s => s.selector && s.selector.trim() !== '').length;
     lines.push(`**Selectors captured:** ${selectorsReported} of ${stepCount} steps included CSS selectors.`);
     if (selectorsReported === 0) {
-      lines.push('> Tip: Including the CSS selectors you used (e.g., `input#search`, `button.submit`) in each step makes your report much more valuable for macro synthesis.');
+      lines.push('');
+      lines.push('⚠️ **No CSS selectors were included in your report.** This report cannot be used for macro synthesis.');
+      lines.push('Please call `report_outcome` again with the actual CSS selectors from your browser tool calls.');
+      lines.push('Look at your click/fill/type tool calls above — each one used a CSS selector. Copy those into the steps array.');
+      lines.push('');
+      lines.push('Example: `{ action: "click", selector: "input#twotabsearchtextbox", success: true }`');
+    } else if (selectorsReported < stepCount - 1) {
+      // Allow 1 missing (navigate steps often have no selector)
+      lines.push(`> ${stepCount - selectorsReported} steps are missing selectors. Include selectors for click, fill, and extract actions to maximize macro quality.`);
     }
   }
 
