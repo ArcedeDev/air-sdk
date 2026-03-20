@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as readline from 'node:readline';
+import { execSync, spawn } from 'node:child_process';
 import { bold, dim, green, red, yellow, cyan } from './colors';
 import {
   resolveApiKey,
@@ -34,8 +35,49 @@ interface McpConfig {
 const MCP_SERVER_KEY = 'air-sdk';
 const DASHBOARD_URL = 'https://agentinternetruntime.com/extract/dashboard/sdk';
 
-/** The MCP server config block we inject. */
-function buildMcpEntry(apiKey: string): McpServerEntry {
+/** Check if air-sdk is globally installed and return the binary path. */
+function findGlobalBinary(): string | null {
+  try {
+    const cmd = process.platform === 'win32' ? 'where air-sdk' : 'which air-sdk';
+    const result = execSync(cmd, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    return result || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Install @arcede/air-sdk globally. Returns true on success. */
+function installGlobally(): boolean {
+  try {
+    console.log('  ' + dim('Installing @arcede/air-sdk globally for fast startup (~2s vs ~60s)...'));
+    execSync('npm install -g @arcede/air-sdk', {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8',
+      timeout: 60_000,
+    });
+    return true;
+  } catch (err: any) {
+    // Common failure: EACCES on macOS/Linux (needs sudo or nvm)
+    const msg = err?.stderr?.toString() || err?.message || '';
+    if (msg.includes('EACCES') || msg.includes('permission')) {
+      console.log('  ' + dim('Permission denied — try: npm config set prefix ~/.npm-global'));
+    }
+    return false;
+  }
+}
+
+/** The MCP server config block we inject. Uses global binary if available. */
+function buildMcpEntry(apiKey: string, useGlobal: boolean): McpServerEntry {
+  if (useGlobal) {
+    return {
+      command: 'air-sdk',
+      args: ['--mcp'],
+      env: { AIR_API_KEY: apiKey },
+    };
+  }
   return {
     command: 'npx',
     args: ['-y', '@arcede/air-sdk', '--mcp'],
@@ -69,12 +111,12 @@ function hasExistingEntry(config: McpConfig): boolean {
 }
 
 /** Inject the air-sdk MCP server entry into a config object. */
-function injectMcpServer(config: McpConfig, apiKey: string): McpConfig {
+function injectMcpServer(config: McpConfig, apiKey: string, useGlobal: boolean): McpConfig {
   const updated = { ...config };
   if (!updated.mcpServers) {
     updated.mcpServers = {};
   }
-  updated.mcpServers[MCP_SERVER_KEY] = buildMcpEntry(apiKey);
+  updated.mcpServers[MCP_SERVER_KEY] = buildMcpEntry(apiKey, useGlobal);
   return updated;
 }
 
@@ -167,10 +209,13 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
         console.log('');
         console.log('  Opening dashboard...');
         try {
-          const { exec } = await import('node:child_process');
           const openCmd = process.platform === 'darwin' ? 'open' :
-            process.platform === 'win32' ? 'start' : 'xdg-open';
-          exec(openCmd + ' ' + DASHBOARD_URL);
+            process.platform === 'win32' ? 'cmd' : 'xdg-open';
+          const openArgs = process.platform === 'win32'
+            ? ['/c', 'start', DASHBOARD_URL]
+            : [DASHBOARD_URL];
+          const child = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
+          child.unref();
         } catch { /* best-effort */ }
 
         console.log('  Get your key at: ' + cyan(DASHBOARD_URL));
@@ -208,7 +253,25 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     console.log('');
   }
 
-  // 2. Detect which targets exist
+  // 2. Install globally for fast MCP startup (~2s vs ~60s)
+  let useGlobal = !!findGlobalBinary();
+  if (!useGlobal && !dryRun) {
+    const didInstall = installGlobally();
+    if (didInstall && findGlobalBinary()) {
+      useGlobal = true;
+      console.log('  ' + green('✓') + ' Installed globally ' + dim('(agent startup ~2s instead of ~60s)'));
+    } else {
+      console.log('  ' + yellow('⚠') + ' Global install failed — falling back to npx ' + dim('(~60s startup)'));
+      console.log('    ' + dim('To fix: run "npm install -g @arcede/air-sdk" manually'));
+    }
+  } else if (useGlobal) {
+    console.log('  ' + green('✓') + ' Global binary found ' + dim('(fast startup)'));
+  } else if (dryRun) {
+    console.log('  → Would install @arcede/air-sdk globally ' + dim('(npm install -g)'));
+  }
+  console.log('');
+
+  // 3. Detect which targets exist
   const targets = getTargets();
   const detected = targets.filter(t => fs.existsSync(t.configPath));
   const skipped = targets.filter(t => !fs.existsSync(t.configPath));
@@ -222,12 +285,16 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     }
     console.log('');
     console.log('  You can configure manually:');
-    console.log('    ' + cyan('claude mcp add air-sdk -- npx -y @arcede/air-sdk --mcp'));
+    if (useGlobal) {
+      console.log('    ' + cyan('claude mcp add air-sdk -- air-sdk --mcp'));
+    } else {
+      console.log('    ' + cyan('claude mcp add air-sdk -- npx -y @arcede/air-sdk --mcp'));
+    }
     console.log('');
     return;
   }
 
-  // 3. Install to detected targets
+  // 4. Install to detected targets
   let installed = 0;
   let updated = 0;
 
@@ -235,7 +302,7 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     const existing = readJsonFile(target.configPath);
     const config: McpConfig = (existing as McpConfig) ?? {};
     const wasExisting = hasExistingEntry(config);
-    const updatedConfig = injectMcpServer(config, apiKey);
+    const updatedConfig = injectMcpServer(config, apiKey, useGlobal);
 
     if (dryRun) {
       const verb = wasExisting ? 'update' : 'install to';
@@ -252,7 +319,7 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     }
   }
 
-  // 4. Report skipped targets
+  // 5. Report skipped targets
   if (skipped.length > 0) {
     console.log('');
     for (const t of skipped) {
@@ -268,7 +335,7 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     return;
   }
 
-  // 5. Summary
+  // 6. Summary
   const total = installed + updated;
   if (installed > 0 && updated > 0) {
     console.log('  ' + green('Done!') + ' Installed to ' + installed + ', updated ' + updated + ' agent(s).');
