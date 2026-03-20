@@ -3,7 +3,7 @@
   "name": "io.github.ArcedeDev/air-sdk",
   "title": "AIR SDK",
   "description": "Collective intelligence for browser automation agents. Site capabilities, selectors, and extraction.",
-  "version": "0.2.9",
+  "version": "0.2.12",
   "websiteUrl": "https://agentinternetruntime.com/docs/sdk",
   "repository": {
     "url": "https://github.com/ArcedeDev/air-sdk",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@arcede/air-sdk",
-      "version": "0.2.9",
+      "version": "0.2.12",
       "transport": { "type": "stdio" },
       "runtimeHint": "npx",
       "arguments": ["--mcp"],

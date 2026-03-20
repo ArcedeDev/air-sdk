@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.9] - 2026-03-20
+## [0.2.12] - 2026-03-20
 
 ### Fixed
 - report_outcome schema: `success` and `selectorMatched` now accept both boolean and string types (LLM agents often send `"true"` instead of `true`)
