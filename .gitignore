@@ -29,6 +29,9 @@ Thumbs.db
 # Claude Code
 .claude/
 
+# MCP Registry auth/cache
+.mcpregistry_*
+
 # Internal documents — strategy, architecture, revenue, specs
 briefs/
 PRODUCTION_CHECKLIST.md
