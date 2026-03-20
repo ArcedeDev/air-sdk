@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test coverage
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Claude Code
+.claude/
+
+# Internal documents — strategy, architecture, revenue, specs
+briefs/
+PRODUCTION_CHECKLIST.md
+QA_REVIEW.md
+air-sdk-product-spec.md
+DISTRIBUTION_MAP.md
+test-suite.md
+*.internal.md
+
+# Internal test scripts (contain hardcoded API keys)
+examples/generate-telemetry.ts
+examples/manual-test.ts
+
+# E2E tests that require live API keys
+tests/e2e/cloud.test.ts
+tests/e2e/real-world.test.ts
+
+# Package lock (library — consumers use their own)
+package-lock.json
+
+# npm
+.npmrc
+*.tgz
+
+# Benchmark results (generated, not committed)
+benchmark/results.txt
+benchmark/README_SECTION.md
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

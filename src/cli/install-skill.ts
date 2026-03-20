@@ -1,0 +1,291 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import * as readline from 'node:readline';
+import { bold, dim, green, red, yellow, cyan } from './colors';
+import {
+  resolveApiKey,
+  saveCredentials,
+  maskKey,
+  isValidKeyFormat,
+  sourceLabel,
+} from './config';
+
+// ============================================================
+// AIR SDK — install-skill
+// Registers the AIR MCP server into Claude Code, Cursor, and Windsurf.
+//
+// Usage:
+//   npx @arcede/air-sdk install-skill
+//   npx @arcede/air-sdk install-skill --dry-run
+// ============================================================
+
+interface McpServerEntry {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+interface McpConfig {
+  mcpServers?: Record<string, McpServerEntry>;
+  [key: string]: unknown;
+}
+
+const MCP_SERVER_KEY = 'air-sdk';
+const DASHBOARD_URL = 'https://agentinternetruntime.com/extract/dashboard/sdk';
+
+/** The MCP server config block we inject. */
+function buildMcpEntry(apiKey: string): McpServerEntry {
+  return {
+    command: 'npx',
+    args: ['-y', '@arcede/air-sdk', '--mcp'],
+    env: { AIR_API_KEY: apiKey },
+  };
+}
+
+/** Safely read a JSON file, returning null on failure. */
+function readJsonFile(filePath: string): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Write a JSON object back to disk with pretty-printing. */
+function writeJsonFile(filePath: string, data: Record<string, unknown>): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n');
+}
+
+/** Check if the air-sdk MCP entry already exists in a config. */
+function hasExistingEntry(config: McpConfig): boolean {
+  return !!(config.mcpServers && config.mcpServers[MCP_SERVER_KEY]);
+}
+
+/** Inject the air-sdk MCP server entry into a config object. */
+function injectMcpServer(config: McpConfig, apiKey: string): McpConfig {
+  const updated = { ...config };
+  if (!updated.mcpServers) {
+    updated.mcpServers = {};
+  }
+  updated.mcpServers[MCP_SERVER_KEY] = buildMcpEntry(apiKey);
+  return updated;
+}
+
+// ---- Target Definitions ----
+
+interface InstallTarget {
+  name: string;
+  configPath: string;
+}
+
+function getTargets(): InstallTarget[] {
+  const home = os.homedir();
+  return [
+    {
+      name: 'Claude Code',
+      configPath: path.join(home, '.claude.json'),
+    },
+    {
+      name: 'Cursor',
+      configPath: path.join(home, '.cursor', 'mcp.json'),
+    },
+    {
+      name: 'Windsurf',
+      configPath: path.join(home, '.codeium', 'windsurf', 'mcp_config.json'),
+    },
+  ];
+}
+
+/** Export targets for use by logout command. */
+export { getTargets, MCP_SERVER_KEY, readJsonFile, writeJsonFile };
+
+// ---- Main ----
+
+export async function runInstallSkill(flags?: string[]): Promise<void> {
+  const dryRun = flags?.includes('--dry-run') ?? false;
+
+  if (flags?.includes('--help') || flags?.includes('-h')) {
+    console.log(`
+  ${bold('air-sdk install-skill')} — Register AIR as an agent skill
+
+  ${bold('Usage:')}
+    npx @arcede/air-sdk install-skill ${dim('[options]')}
+
+  ${bold('Options:')}
+    --dry-run    Preview changes without modifying files
+    --help, -h   Show this help message
+
+  ${bold('What it does:')}
+    Auto-detects Claude Code, Cursor, and Windsurf, then writes the
+    MCP server config and injects your API key. Your agent gets 4 new
+    tools: extract_url, browse_capabilities, execute_capability, and
+    report_outcome.
+
+  ${bold('Docs:')} ${cyan('https://agentinternetruntime.com/docs/sdk')}
+`);
+    return;
+  }
+
+  console.log('');
+  console.log('  ' + bold('AIR SDK — Install Agent Skill'));
+  console.log('  ' + dim('─'.repeat(34)));
+  if (dryRun) {
+    console.log('  ' + dim('(dry run — no files will be modified)'));
+  }
+  console.log('');
+
+  // 1. Resolve API key from all sources
+  let resolved = resolveApiKey();
+  let apiKey: string;
+
+  if (resolved) {
+    console.log('  Using key: ' + dim(maskKey(resolved.key)));
+    console.log('  Source: ' + dim(sourceLabel(resolved.source)));
+    console.log('');
+    apiKey = resolved.key;
+  } else {
+    // No key found — prompt interactively
+    console.log('  ' + yellow('⚠') + ' No API key found.');
+    console.log(dim('    Checked: AIR_API_KEY env var, ~/.config/air/credentials.json, .env'));
+    console.log('');
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q: string): Promise<string> => new Promise(r => rl.question(q, r));
+
+    try {
+      const key = (await ask('  Paste your API key (or press Enter to open dashboard): ')).trim();
+
+      if (!key) {
+        // Open dashboard and ask again
+        console.log('');
+        console.log('  Opening dashboard...');
+        try {
+          const { exec } = await import('node:child_process');
+          const openCmd = process.platform === 'darwin' ? 'open' :
+            process.platform === 'win32' ? 'start' : 'xdg-open';
+          exec(openCmd + ' ' + DASHBOARD_URL);
+        } catch { /* best-effort */ }
+
+        console.log('  Get your key at: ' + cyan(DASHBOARD_URL));
+        console.log('');
+        const retryKey = (await ask('  API Key: ')).trim();
+
+        if (!retryKey) {
+          console.error('\n  ' + red('No key provided. Aborting.'));
+          rl.close();
+          process.exit(1);
+        }
+        apiKey = retryKey;
+      } else {
+        apiKey = key;
+      }
+    } finally {
+      rl.close();
+    }
+
+    if (!isValidKeyFormat(apiKey)) {
+      console.error('\n  ' + red('Invalid key format.') + ' AIR SDK keys start with "air_".');
+      console.error('  Get one at: ' + cyan(DASHBOARD_URL));
+      process.exit(1);
+    }
+
+    // Save to global config so user doesn't have to enter again
+    try {
+      saveCredentials(apiKey, 'install-skill');
+      console.log('');
+      console.log('  ' + green('✓') + ' Key saved to ' + dim('~/.config/air/credentials.json'));
+    } catch {
+      // Non-fatal — we can still install the skill
+    }
+
+    console.log('');
+  }
+
+  // 2. Detect which targets exist
+  const targets = getTargets();
+  const detected = targets.filter(t => fs.existsSync(t.configPath));
+  const skipped = targets.filter(t => !fs.existsSync(t.configPath));
+
+  if (detected.length === 0) {
+    console.log('  ' + yellow('⚠') + ' No supported agent configs detected.');
+    console.log('');
+    console.log(dim('  Looked for:'));
+    for (const t of targets) {
+      console.log(dim('    • ' + t.name + ' — ' + t.configPath));
+    }
+    console.log('');
+    console.log('  You can configure manually:');
+    console.log('    ' + cyan('claude mcp add air-sdk -- npx -y @arcede/air-sdk --mcp'));
+    console.log('');
+    return;
+  }
+
+  // 3. Install to detected targets
+  let installed = 0;
+  let updated = 0;
+
+  for (const target of detected) {
+    const existing = readJsonFile(target.configPath);
+    const config: McpConfig = (existing as McpConfig) ?? {};
+    const wasExisting = hasExistingEntry(config);
+    const updatedConfig = injectMcpServer(config, apiKey);
+
+    if (dryRun) {
+      const verb = wasExisting ? 'update' : 'install to';
+      console.log('  → Would ' + verb + ' ' + bold(target.name) + dim(' — ' + target.configPath));
+    } else {
+      writeJsonFile(target.configPath, updatedConfig as Record<string, unknown>);
+      if (wasExisting) {
+        console.log('  ' + green('✓') + ' ' + bold(target.name) + dim(' — updated existing config'));
+        updated++;
+      } else {
+        console.log('  ' + green('✓') + ' ' + bold(target.name) + dim(' — installed'));
+        installed++;
+      }
+    }
+  }
+
+  // 4. Report skipped targets
+  if (skipped.length > 0) {
+    console.log('');
+    for (const t of skipped) {
+      console.log('  ' + dim('· ' + t.name + ' — not detected (skipped)'));
+    }
+  }
+
+  console.log('');
+
+  if (dryRun) {
+    console.log('  Re-run without --dry-run to apply changes.');
+    console.log('');
+    return;
+  }
+
+  // 5. Summary
+  const total = installed + updated;
+  if (installed > 0 && updated > 0) {
+    console.log('  ' + green('Done!') + ' Installed to ' + installed + ', updated ' + updated + ' agent(s).');
+  } else if (updated > 0) {
+    console.log('  ' + green('Done!') + ' Updated ' + total + ' agent(s).');
+  } else {
+    console.log('  ' + green('Done!') + ' Installed to ' + total + ' agent(s).');
+  }
+  console.log(dim('  Restart your agent to activate.'));
+  console.log('');
+  console.log('  ' + bold('Your agent now has 4 new tools:'));
+  console.log('    ' + cyan('extract_url') + '          — Extract structured data from any URL');
+  console.log('    ' + cyan('browse_capabilities') + '  — Discover what actions are possible on a site');
+  console.log('    ' + cyan('execute_capability') + '   — Get a step-by-step execution plan');
+  console.log('    ' + cyan('report_outcome') + '       — Report results to improve collective intelligence');
+  console.log('');
+  console.log('  ' + bold('Try it:'));
+  console.log('    ' + dim('"Use AIR to browse capabilities on amazon.com"'));
+  console.log('');
+}

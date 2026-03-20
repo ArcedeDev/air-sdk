@@ -1,0 +1,10 @@
+{
+  "name": "air-sdk-examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@arcede/air-sdk": "latest",
+    "playwright": "latest",
+    "dotenv": "latest"
+  }
+}

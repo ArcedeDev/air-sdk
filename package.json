@@ -1,0 +1,107 @@
+{
+  "name": "@arcede/air-sdk",
+  "version": "0.2.9",
+  "description": "Execution intelligence for browser automation agents",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./playwright": {
+      "types": "./dist/adapters/playwright.d.ts",
+      "import": "./dist/adapters/playwright.mjs",
+      "require": "./dist/adapters/playwright.js"
+    },
+    "./puppeteer": {
+      "types": "./dist/adapters/puppeteer.d.ts",
+      "import": "./dist/adapters/puppeteer.mjs",
+      "require": "./dist/adapters/puppeteer.js"
+    },
+    "./browser-use": {
+      "types": "./dist/adapters/browser-use.d.ts",
+      "import": "./dist/adapters/browser-use.mjs",
+      "require": "./dist/adapters/browser-use.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/server.d.ts",
+      "import": "./dist/mcp/server.mjs",
+      "require": "./dist/mcp/server.js"
+    }
+  },
+  "bin": {
+    "air-sdk": "./dist/cli/entry.js",
+    "air-mcp": "./dist/mcp/server.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "version": "node -e \"const v=require('./package.json').version;require('fs').writeFileSync('src/version.ts','/** SDK version — kept in sync with package.json by npm version */\\nexport const SDK_VERSION = \\x27'+v+'\\x27;\\n')\"",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0",
+    "puppeteer": ">=22.0.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    },
+    "puppeteer": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/parser": "^8.57.1",
+    "eslint": "^9.0.0",
+    "playwright": "^1.42.0",
+    "puppeteer": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "keywords": [
+    "playwright",
+    "puppeteer",
+    "browser-automation",
+    "ai-agent",
+    "web-automation",
+    "smart-selectors",
+    "execution-intelligence",
+    "macro",
+    "mcp",
+    "browser-use"
+  ],
+  "author": "frans <info@arcede.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ArcedeDev/air-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ArcedeDev/air-sdk/issues"
+  },
+  "homepage": "https://agentinternetruntime.com/docs/sdk",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ]
+}
