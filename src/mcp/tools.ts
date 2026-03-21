@@ -24,8 +24,12 @@ export const tools = [
     name: 'extract_url',
     description:
       'Extract structured data from any URL. Returns title, description, content items, ' +
-      'metadata, and diagnostics. Handles SPAs (YouTube, Next.js, Nuxt), JSON-LD, and ' +
-      'standard meta tags. Costs 1.0 credit (fresh) or 0.1 credit (cached).',
+      'metadata, and diagnostics. Handles SPAs (YouTube, Next.js, Nuxt), JSON-LD, ' +
+      'RSS/Atom feeds, JSON APIs, and standard meta tags. ' +
+      'Best results on: sites with JSON-LD, RSS/Atom feeds, JSON APIs, and SPAs with standard state globals. ' +
+      'Limited results on: retail sites (Amazon, Walmart), CAPTCHA-protected sites, and heavy SPAs — ' +
+      'for these, use browser tools (get_page_text, screenshot) and report what you find via report_outcome with browserObservations. ' +
+      'Costs 1.0 credit (fresh) or 0.1 credit (cached). Meta-only results cost 0 credits.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -46,7 +50,9 @@ export const tools = [
     description:
       'Step 1 of 3: Discover what actions can be automated on a website domain. Returns capabilities ' +
       '(search, login, add to cart, etc.) with confidence scores, execution tiers, selectors, ' +
-      'and macro availability. Always follow up with execute_capability (step 2) and report_outcome (step 3).',
+      'and macro availability. Even if a domain has no indexed capabilities, universal patterns from ' +
+      'similar sites may provide execution guidance via execute_capability. ' +
+      'Always follow up with execute_capability (step 2) and report_outcome (step 3).',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -96,7 +102,9 @@ export const tools = [
       'Example steps: [{ action: "click", selector: "input#twotabsearchtextbox", success: true }, ' +
       '{ action: "fill", selector: "input#twotabsearchtextbox", value: "query", success: true }, ' +
       '{ action: "click", selector: "input#nav-search-submit-button", success: true }]. ' +
-      'Look at the CSS selectors from your browser tool calls and copy them exactly into each step.',
+      'Look at the CSS selectors from your browser tool calls and copy them exactly into each step. ' +
+      'If you used browser tools (get_page_text, screenshot) because extract_url was insufficient, ' +
+      'include browserObservations to help improve future extractions on this domain.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -144,6 +152,31 @@ export const tools = [
         notes: {
           type: 'string',
           description: 'Any additional context about the execution (errors encountered, fallback selectors used, etc.)',
+        },
+        browserObservations: {
+          type: 'object',
+          description: 'Optional. Report what you observed via browser tools when extract_url was insufficient. Helps improve future extractions.',
+          properties: {
+            pageStructure: {
+              type: 'object',
+              description: 'Structural observations about the page DOM',
+              properties: {
+                hasSearchForm: { type: 'boolean', description: 'Page has a search form' },
+                hasProductGrid: { type: 'boolean', description: 'Page has a product listing grid' },
+                hasLoginForm: { type: 'boolean', description: 'Page has a login form' },
+                jsonLdTypes: { type: 'array', items: { type: 'string' }, description: 'Schema.org @type values found in JSON-LD' },
+                mainContentSelector: { type: 'string', description: 'CSS selector for the main content area' },
+              },
+            },
+            extractionFallbackUsed: {
+              type: 'string',
+              description: 'Which browser tool you fell back to: get_page_text, screenshot, javascript_eval, or web_search',
+            },
+            contentQualityVsBrowser: {
+              type: 'string',
+              description: 'How extract_url quality compared to browser: browser_much_better, browser_slightly_better, or comparable',
+            },
+          },
         },
       },
       required: ['domain', 'capability', 'success'],
@@ -307,6 +340,10 @@ async function handleExtractUrl(
     lines.push(`**Credits:** ${response.credits_used} used | ${response.credits_remaining ?? '?'} remaining`);
   }
 
+  // Compact diagnostics line for easy agent logging and test analysis
+  lines.push('');
+  lines.push(`\`[AIR-DIAG] method=${diag?.extractionMethod || 'unknown'} confidence=${diag?.confidenceScore?.toFixed(2) || '0'} items=${itemCount} cached=${diag?.servedFromCache || false} credits=${response.credits_used ?? 0}\``);
+
   // Include content summary
   if (d.content?.items && Array.isArray(d.content.items) && d.content.items.length > 0) {
     lines.push('');
@@ -356,7 +393,7 @@ async function handleBrowseCapabilities(
   }
 
   // Sort by execution quality: best tier first, then highest confidence
-  const tierRank: Record<string, number> = { api_direct: 0, macro_verified: 1, selector_guided: 2, url_only: 3, description_only: 4 };
+  const tierRank: Record<string, number> = { api_direct: 0, macro_verified: 1, selector_guided: 2, pattern_matched: 3, url_only: 4, description_only: 5 };
   const sorted = [...capabilities].sort((a, b) => {
     const ta = tierRank[a.executionTier || 'description_only'] ?? 4;
     const tb = tierRank[b.executionTier || 'description_only'] ?? 4;
@@ -390,7 +427,7 @@ async function handleBrowseCapabilities(
       const t = cap.executionTier || 'description_only';
       tierGroups[t] = (tierGroups[t] || 0) + 1;
     }
-    const tierOrder = ['api_direct', 'macro_verified', 'selector_guided', 'url_only', 'description_only'];
+    const tierOrder = ['api_direct', 'macro_verified', 'selector_guided', 'pattern_matched', 'url_only', 'description_only'];
     const summary = tierOrder
       .filter(t => tierGroups[t])
       .map(t => `${tierGroups[t]} ${formatTierLabel(t)}`)
@@ -424,6 +461,15 @@ async function handleBrowseCapabilities(
       renderCapabilityDetail(cap, lines);
     }
   }
+
+  // Compact diagnostics line for easy agent logging
+  const tierSummary = sorted.reduce((acc: Record<string, number>, c: any) => {
+    const t = c.executionTier || 'description_only';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+  lines.push(`\`[AIR-DIAG] domain=${domain} total=${sorted.length} ${Object.entries(tierSummary).map(([k,v]) => `${k}=${v}`).join(' ')}\``);
+  lines.push('');
 
   // CTA — 3-step workflow: browse → execute → report
   lines.push('---');
@@ -726,6 +772,63 @@ async function handleExecuteCapability(
     return textResult(lines.join('\n'));
   }
 
+  // ---- Path 4.5: Universal pattern match — cross-domain pattern transfer ----
+  // When no domain-specific macro or selectors exist, check if a universal pattern
+  // (verified on other domains) can provide execution guidance with semantic selectors.
+  try {
+    const patternRes = await httpClient.post<{
+      success: boolean;
+      data?: { pattern_name: string; steps: any[]; domain_count: number; confidence: number; domains_observed: string[] };
+    }>('/api/v1/sdk/pattern-match', { capability, domain });
+
+    if (patternRes.success && patternRes.data && patternRes.data.steps?.length > 0) {
+      const pat = patternRes.data;
+
+      const lines = [
+        `## Pattern Match: ${capability} on ${domain}`,
+        `**Execution tier:** pattern_matched 🔄 (verified on ${pat.domain_count} other domain${pat.domain_count > 1 ? 's' : ''})`,
+        `**Pattern:** "${pat.pattern_name}" (confidence: ${(pat.confidence * 100).toFixed(0)}%)`,
+        `**Request ID:** \`${requestId}\``,
+        '',
+        `This pattern has been verified on: ${pat.domains_observed.slice(0, 5).join(', ')}${pat.domains_observed.length > 5 ? ` and ${pat.domains_observed.length - 5} more` : ''}`,
+        '',
+        '### Steps (with semantic selectors)',
+        '',
+      ];
+
+      for (let i = 0; i < pat.steps.length; i++) {
+        const step = pat.steps[i];
+        const selectorSuggestions = getSemanticSelectors(step.semanticRole);
+
+        lines.push(`**Step ${i + 1}: ${step.action}** (${step.semanticRole})`);
+        if (step.paramsKey && params[step.paramsKey]) {
+          lines.push(`- Value: "${params[step.paramsKey]}"`);
+        }
+        if (selectorSuggestions.length > 0) {
+          lines.push('- Try these selectors in order:');
+          for (const sel of selectorSuggestions) {
+            lines.push(`  - \`${sel}\``);
+          }
+        }
+        lines.push('');
+      }
+
+      lines.push('---');
+      lines.push('### ⚠️ Required: Report Your Results');
+      lines.push('');
+      lines.push('This is a **pattern-based suggestion**, not a verified macro. Your report with actual CSS selectors ' +
+        'will create a domain-specific macro AND strengthen the universal pattern.');
+      lines.push('');
+      lines.push('```');
+      lines.push(`report_outcome({ domain: "${domain}", capability: "${capability}", success: true/false, requestId: "${requestId}", executionTier: "pattern_matched", steps: [...] })`);
+      lines.push('```');
+
+      return textResult(lines.join('\n'));
+    }
+  } catch {
+    // Pattern lookup failed — fall through to URL/description only
+  }
+
   // ---- Path 5: URL-only or description-only — hints, not a plan ----
   // The LLM is smart enough to figure out how to interact with a website.
   // AIR provides: context, metadata, entry points, and a request ID to correlate the report.
@@ -919,6 +1022,7 @@ function formatTierLabel(tier: string): string {
     case 'api_direct': return '⚡ API Direct';
     case 'macro_verified': return '✅ Macro Verified';
     case 'selector_guided': return '🎯 Selector Guided';
+    case 'pattern_matched': return '🔄 Pattern Matched';
     case 'url_only': return '📄 URL Only';
     case 'description_only': return '📝 Description Only';
     default: return tier;
@@ -1003,6 +1107,38 @@ async function handleReportOutcome(
     // Telemetry is best-effort — don't fail the tool call
   }
 
+  // Forward browser observations as structural hints (S4: browser intelligence capture)
+  const browserObs = args?.browserObservations as Record<string, any> | undefined;
+  if (browserObs && domain) {
+    try {
+      const pageStructure = browserObs.pageStructure as Record<string, any> | undefined;
+      await httpClient.post('/api/v1/sdk/telemetry', {
+        events: [{
+          domain,
+          path: null,
+          actionSequence: [],
+          sessionOutcome: 'browser_observation',
+          macroId: null,
+          macroVersion: null,
+          macroSucceeded: null,
+          recoverySequence: null,
+          browserInfo: { framework: 'mcp_browser', headless: false, frameworkVersion: 'unknown' },
+          pageSignals: {
+            capability,
+            browserObservations: {
+              pageStructure: pageStructure || null,
+              extractionFallbackUsed: browserObs.extractionFallbackUsed || null,
+              contentQualityVsBrowser: browserObs.contentQualityVsBrowser || null,
+            },
+          },
+          executionTimeMs: 0,
+        }],
+      });
+    } catch {
+      // Browser observation telemetry is best-effort
+    }
+  }
+
   const stepCount = steps.length;
   const successSteps = steps.filter(s => s.success).length;
   const selectorMismatches = steps.filter(s => s.airProvidedSelector && !s.selectorMatched).length;
@@ -1055,6 +1191,15 @@ async function handleReportOutcome(
       'automation playbooks fresh as websites change their DOM structure.');
   }
 
+  if (browserObs) {
+    lines.push('');
+    lines.push('**Browser observations captured.** Your page structure data helps AIR learn which domains ' +
+      'need browser rendering and improves future extraction quality.');
+    if (browserObs.contentQualityVsBrowser === 'browser_much_better') {
+      lines.push(`> Domain \`${domain}\` flagged as requiring browser rendering for quality extraction.`);
+    }
+  }
+
   return textResult(lines.join('\n'));
 }
 
@@ -1072,6 +1217,29 @@ function generateRequestId(): string {
     id += chars[Math.floor(Math.random() * chars.length)];
   }
   return id;
+}
+
+/** Map semantic roles to CSS selector suggestions for universal pattern matching. */
+function getSemanticSelectors(role: string): string[] {
+  switch (role) {
+    case 'searchbox':
+      return ['[role="searchbox"]', '[role="search"] input', 'input[type="search"]', 'input[name*="search" i]', 'input[placeholder*="search" i]', 'input[aria-label*="search" i]'];
+    case 'search_button':
+    case 'submit_button':
+      return ['[type="submit"]', 'button[type="submit"]', '[role="search"] button', 'button[aria-label*="search" i]', 'button[aria-label*="submit" i]'];
+    case 'auth_input':
+      return ['input[type="password"]', 'input[name*="password" i]', 'input[autocomplete="current-password"]'];
+    case 'email_input':
+      return ['input[type="email"]', 'input[name*="email" i]', 'input[autocomplete="email"]'];
+    case 'text_input':
+      return ['input[type="text"]', 'input:not([type])', 'textarea', '[role="textbox"]'];
+    case 'button':
+      return ['button', '[role="button"]', 'input[type="button"]'];
+    case 'dropdown':
+      return ['select', '[role="listbox"]', '[role="combobox"]'];
+    default:
+      return [];
+  }
 }
 
 function textResult(text: string): McpToolResult {

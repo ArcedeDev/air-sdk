@@ -82,7 +82,7 @@ npx @arcede/air-sdk init   # saves key to ~/.config/air/credentials.json
 **Agent Skill (recommended for AI coding agents):**
 
 ```bash
-npx @arcede/air-sdk install-skill   # auto-configures Claude Code, Cursor, Windsurf, OpenClaw
+npx @arcede/air-sdk install-skill   # auto-configures Claude Desktop, Claude Code, Cursor, Windsurf, OpenClaw
 ```
 
 Free tier included. No credit card. Make the network smarter, star the repo and share it ⭐
@@ -156,15 +156,31 @@ Give your coding agent site intelligence with one command:
 npx @arcede/air-sdk install-skill
 ```
 
-This auto-detects Claude Code, Cursor, Windsurf, and OpenClaw, writes the MCP server config, and injects your API key. It also installs `@arcede/air-sdk` globally for fast agent startup (~2s instead of ~60s with npx). Restart your agent and it instantly has new tools.
+This auto-detects Claude Desktop, Claude Code, Cursor, Windsurf, and OpenClaw, writes the MCP server config, and injects your API key. It installs `@arcede/air-sdk` globally for fast agent startup (~2s instead of ~60s with npx) and writes the absolute binary path to each config to avoid npx version caching issues. Restart your agent and it instantly has new tools.
 
 <details>
-<summary>Manual setup (Claude Code, Cursor, Windsurf, OpenClaw)</summary>
+<summary>Manual setup (Claude Desktop, Claude Code, Cursor, Windsurf, OpenClaw)</summary>
+
+> Requires global install: `npm install -g @arcede/air-sdk`. If not installed globally, replace `"command": "air-sdk"` with `"command": "npx"` and `"args": ["--mcp"]` with `"args": ["-y", "@arcede/air-sdk", "--mcp"]`.
+
+**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "air-sdk": {
+      "command": "air-sdk",
+      "args": ["--mcp"],
+      "env": { "AIR_API_KEY": "air_xxx" }
+    }
+  }
+}
+```
 
 **Claude Code:**
 
 ```bash
-claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- npx -y @arcede/air-sdk --mcp
+claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- air-sdk --mcp
 ```
 
 **Cursor** — add to `~/.cursor/mcp.json`:
@@ -173,8 +189,8 @@ claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- npx -y @arcede/air-sdk --
 {
   "mcpServers": {
     "air-sdk": {
-      "command": "npx",
-      "args": ["-y", "@arcede/air-sdk", "--mcp"],
+      "command": "air-sdk",
+      "args": ["--mcp"],
       "env": { "AIR_API_KEY": "air_xxx" }
     }
   }
@@ -187,8 +203,8 @@ claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- npx -y @arcede/air-sdk --
 {
   "mcpServers": {
     "air-sdk": {
-      "command": "npx",
-      "args": ["-y", "@arcede/air-sdk", "--mcp"],
+      "command": "air-sdk",
+      "args": ["--mcp"],
       "env": { "AIR_API_KEY": "air_xxx" }
     }
   }
@@ -201,8 +217,8 @@ claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- npx -y @arcede/air-sdk --
 {
   "mcpServers": {
     "air-sdk": {
-      "command": "npx",
-      "args": ["-y", "@arcede/air-sdk", "--mcp"],
+      "command": "air-sdk",
+      "args": ["--mcp"],
       "env": { "AIR_API_KEY": "air_xxx" }
     }
   }
