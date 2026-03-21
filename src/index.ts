@@ -86,4 +86,6 @@ export { CapabilityExecutor } from './execute/executor';
 export { FallbackObserver } from './execute/fallback-observer';
 export { MPPHandler } from './core/mpp-handler';
 export { SpendingPolicyManager } from './core/spending-policy';
+export { TicketManager } from './core/ticket-manager';
+export type { TicketInfo, TicketManagerOptions } from './core/ticket-manager';
 export { SDK_VERSION } from './version';

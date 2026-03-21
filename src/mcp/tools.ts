@@ -225,6 +225,7 @@ interface ExtractApiResponse {
     content?: { type?: string; items?: unknown[] };
     diagnostics?: {
       extractionMethod?: string;
+      confidenceScore?: number;
       itemsExtracted?: number;
       extractionTimeMs?: number;
       servedFromCache?: boolean;
@@ -294,6 +295,7 @@ async function handleExtractUrl(
 
   lines.push(`**URL:** ${d.url || url}`);
   lines.push(`**Extraction method:** ${diag?.extractionMethod || 'unknown'}`);
+  lines.push(`**Confidence:** ${diag?.confidenceScore !== undefined ? (diag.confidenceScore * 100).toFixed(0) + '%' : 'unknown'}`);
   lines.push(`**Items extracted:** ${itemCount}`);
   lines.push(`**Time:** ${diag?.extractionTimeMs || 0}ms`);
 
