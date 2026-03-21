@@ -14,8 +14,8 @@ import {
 
 // ============================================================
 // AIR SDK — install-skill
-// Registers the AIR MCP server into Claude Code, Cursor, Windsurf,
-// and OpenClaw.
+// Registers the AIR MCP server into Claude Desktop, Claude Code,
+// Cursor, Windsurf, and OpenClaw.
 //
 // Usage:
 //   npx @arcede/air-sdk install-skill
@@ -70,11 +70,11 @@ function installGlobally(): boolean {
   }
 }
 
-/** The MCP server config block we inject. Uses global binary if available. */
-function buildMcpEntry(apiKey: string, useGlobal: boolean): McpServerEntry {
-  if (useGlobal) {
+/** The MCP server config block we inject. Uses absolute global binary path if available to avoid npx caching issues. */
+function buildMcpEntry(apiKey: string, globalBinaryPath: string | null): McpServerEntry {
+  if (globalBinaryPath) {
     return {
-      command: 'air-sdk',
+      command: globalBinaryPath,
       args: ['--mcp'],
       env: { AIR_API_KEY: apiKey },
     };
@@ -112,12 +112,12 @@ function hasExistingEntry(config: McpConfig): boolean {
 }
 
 /** Inject the air-sdk MCP server entry into a config object. */
-function injectMcpServer(config: McpConfig, apiKey: string, useGlobal: boolean): McpConfig {
+function injectMcpServer(config: McpConfig, apiKey: string, globalBinaryPath: string | null): McpConfig {
   const updated = { ...config };
   if (!updated.mcpServers) {
     updated.mcpServers = {};
   }
-  updated.mcpServers[MCP_SERVER_KEY] = buildMcpEntry(apiKey, useGlobal);
+  updated.mcpServers[MCP_SERVER_KEY] = buildMcpEntry(apiKey, globalBinaryPath);
   return updated;
 }
 
@@ -128,9 +128,25 @@ interface InstallTarget {
   configPath: string;
 }
 
+/** Resolve the platform-specific Claude Desktop config directory. */
+function claudeDesktopConfigDir(home: string): string {
+  if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'Claude');
+  }
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude');
+  }
+  // Linux / other
+  return path.join(home, '.config', 'Claude');
+}
+
 function getTargets(): InstallTarget[] {
   const home = os.homedir();
   return [
+    {
+      name: 'Claude Desktop',
+      configPath: path.join(claudeDesktopConfigDir(home), 'claude_desktop_config.json'),
+    },
     {
       name: 'Claude Code',
       configPath: path.join(home, '.claude.json'),
@@ -170,10 +186,11 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     --help, -h   Show this help message
 
   ${bold('What it does:')}
-    Auto-detects Claude Code, Cursor, Windsurf, and OpenClaw, then
-    writes the MCP server config and injects your API key. Your agent
-    gets 4 new tools: extract_url, browse_capabilities,
-    execute_capability, and report_outcome.
+    Auto-detects Claude Desktop, Claude Code, Cursor, Windsurf, and
+    OpenClaw, then writes the MCP server config and injects your API
+    key. Uses the absolute binary path (not npx) for reliable version
+    management. Your agent gets 4 new tools: extract_url,
+    browse_capabilities, execute_capability, and report_outcome.
 
   ${bold('Docs:')} ${cyan('https://agentinternetruntime.com/docs/sdk')}
 `);
@@ -259,18 +276,21 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
   }
 
   // 2. Install globally for fast MCP startup (~2s vs ~60s)
-  let useGlobal = !!findGlobalBinary();
-  if (!useGlobal && !dryRun) {
+  //    We use the absolute binary path in configs to avoid npx caching issues on upgrades.
+  let globalBinaryPath = findGlobalBinary();
+  if (!globalBinaryPath && !dryRun) {
     const didInstall = installGlobally();
-    if (didInstall && findGlobalBinary()) {
-      useGlobal = true;
+    if (didInstall) {
+      globalBinaryPath = findGlobalBinary();
+    }
+    if (globalBinaryPath) {
       console.log('  ' + green('✓') + ' Installed globally ' + dim('(agent startup ~2s instead of ~60s)'));
     } else {
       console.log('  ' + yellow('⚠') + ' Global install failed — falling back to npx ' + dim('(~60s startup)'));
       console.log('    ' + dim('To fix: run "npm install -g @arcede/air-sdk" manually'));
     }
-  } else if (useGlobal) {
-    console.log('  ' + green('✓') + ' Global binary found ' + dim('(fast startup)'));
+  } else if (globalBinaryPath) {
+    console.log('  ' + green('✓') + ' Global binary found ' + dim('(' + globalBinaryPath + ')'));
   } else if (dryRun) {
     console.log('  → Would install @arcede/air-sdk globally ' + dim('(npm install -g)'));
   }
@@ -290,8 +310,8 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     }
     console.log('');
     console.log('  You can configure manually:');
-    if (useGlobal) {
-      console.log('    ' + cyan('claude mcp add air-sdk -- air-sdk --mcp'));
+    if (globalBinaryPath) {
+      console.log('    ' + cyan('claude mcp add air-sdk -- ' + globalBinaryPath + ' --mcp'));
     } else {
       console.log('    ' + cyan('claude mcp add air-sdk -- npx -y @arcede/air-sdk --mcp'));
     }
@@ -307,7 +327,7 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     const existing = readJsonFile(target.configPath);
     const config: McpConfig = (existing as McpConfig) ?? {};
     const wasExisting = hasExistingEntry(config);
-    const updatedConfig = injectMcpServer(config, apiKey, useGlobal);
+    const updatedConfig = injectMcpServer(config, apiKey, globalBinaryPath);
 
     if (dryRun) {
       const verb = wasExisting ? 'update' : 'install to';

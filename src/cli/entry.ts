@@ -4,7 +4,7 @@
  * AIR SDK CLI entry point.
  *
  *   npx @arcede/air-sdk init            → Interactive setup (save key to ~/.config/air/)
- *   npx @arcede/air-sdk install-skill   → Register AIR as an agent skill (Claude Code, Cursor, Windsurf)
+ *   npx @arcede/air-sdk install-skill   → Register AIR as an agent skill (Claude Desktop, Claude Code, Cursor, Windsurf)
  *   npx @arcede/air-sdk whoami          → Show current key, source, and agent status
  *   npx @arcede/air-sdk logout          → Remove key from all locations
  *   npx @arcede/air-sdk --mcp           → Start MCP server
@@ -53,7 +53,7 @@ function showHelp(): void {
 
   ${bold('Commands:')}
     ${cyan('init')}                       Set up your API key (saved to ~/.config/air/)
-    ${cyan('install-skill')}              Register AIR as an agent skill (Claude Code, Cursor, Windsurf)
+    ${cyan('install-skill')}              Register AIR as an agent skill (Claude Desktop, Claude Code, Cursor, Windsurf)
     ${cyan('whoami')}                     Show current API key, source, and agent status
     ${cyan('logout')}                     Remove API key from all locations
 
