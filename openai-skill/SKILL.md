@@ -11,11 +11,19 @@ description: >
 
 Use this skill whenever you need to interact with a website or extract data from a URL. AIR gives you collective knowledge from thousands of agents about what works on each site.
 
+## Finding the Skill Directory
+
+OpenAI mounts skills at a path like `/home/oai/skills/air-sdk-<version>/`. To locate it reliably:
+```bash
+SKILL_DIR=$(dirname "$(find /home/oai/skills /mnt/skills -name 'air.js' 2>/dev/null | head -1)")
+```
+Use `$SKILL_DIR` in all commands below. If that doesn't work, try `ls /home/oai/skills/` to find the exact path.
+
 ## Setup
 
 Run once per container:
 ```bash
-bash /mnt/skills/air-sdk/setup.sh
+bash "$SKILL_DIR/setup.sh"
 ```
 
 ## Available Commands
@@ -25,28 +33,28 @@ All commands require `$AIR_API_KEY` (injected via domain_secrets). Output is JSO
 ### 1. Browse Capabilities
 Discover what actions are possible on a website before navigating:
 ```bash
-node /mnt/skills/air-sdk/air.js browse amazon.com
+node "$SKILL_DIR/air.js" browse amazon.com
 ```
 Returns: capabilities, confidence scores, execution tiers, available macros, CSS selectors.
 
 ### 2. Extract Structured Data
 Extract title, description, content items, and metadata from any URL:
 ```bash
-node /mnt/skills/air-sdk/air.js extract "https://example.com/page"
+node "$SKILL_DIR/air.js" extract "https://example.com/page"
 ```
 Best results on: JSON-LD sites, RSS/Atom feeds, JSON APIs, SPAs (YouTube, Next.js). Limited results on retail sites and CAPTCHA-protected pages — use Playwright for those and report what you find.
 
 ### 3. Execute a Capability
 Get a step-by-step execution plan with CSS selectors:
 ```bash
-node /mnt/skills/air-sdk/air.js execute kayak.com search_flights '{"origin":"NYC","destination":"Tokyo","date":"2026-04-15"}'
+node "$SKILL_DIR/air.js" execute kayak.com search_flights '{"origin":"NYC","destination":"Tokyo","date":"2026-04-15"}'
 ```
 Returns: entry URL, CSS selectors, fallback selectors, execution tier. Use these with Playwright or Puppeteer.
 
 ### 4. Report Outcome
 After executing, report what happened so the network learns:
 ```bash
-node /mnt/skills/air-sdk/air.js report kayak.com search_flights true '[{"action":"click","selector":"#search-btn","success":true},{"action":"fill","selector":"input#origin","value":"NYC","success":true}]'
+node "$SKILL_DIR/air.js" report kayak.com search_flights true '[{"action":"click","selector":"#search-btn","success":true},{"action":"fill","selector":"input#origin","value":"NYC","success":true}]'
 ```
 You MUST include the actual CSS selectors you used. Reports without selectors are discarded.
 
@@ -86,9 +94,18 @@ const { chromium } = require('playwright');
 "
 ```
 
+## Requirements
+
+- **Model:** gpt-5.4 or gpt-5.4-mini (shell tool required)
+- **Network:** `api.agentinternetruntime.com` must be in org allowlist and `allowed_domains`
+- **Secrets:** Two `domain_secrets` needed — `AIR_API_KEY` (env var) and `Authorization` (header injection)
+
 ## Important Notes
 
 - Output is always JSON for easy parsing by the model
 - Free tier: 1,000 executions/month, no credit card required
+- SDK quality-gated billing: meta-only extractions (CAPTCHA-blocked sites) cost 0 executions
+- Best extraction results on: RSS/Atom feeds, JSON APIs, JSON-LD sites, SPAs (YouTube, Next.js)
+- Limited results on: retail sites (Amazon, Walmart), CAPTCHA-protected pages — use Playwright for those and report via `report`
 - Privacy: input values, cookies, and PII are never sent to AIR. Only anonymized selector and outcome data
 - Some websites block automated browsing. If a site blocks you, report the failure — the data is valuable

@@ -231,10 +231,48 @@ claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- air-sdk --mcp
 
 | Tool | Description |
 |------|-------------|
-| `extract_url` | Extract structured data from any URL (SPAs, JSON-LD, meta tags) |
-| `browse_capabilities` | Discover what actions can be automated on a website domain |
-| `execute_capability` | Get a structured execution plan with CSS selectors and fallbacks |
-| `report_outcome` | Report execution results to improve the collective intelligence |
+| `extract_url` | Extract structured data from any URL — JSON-LD, RSS/Atom feeds, JSON APIs, SPAs. Meta-only results cost 0 credits. |
+| `browse_capabilities` | Discover what actions can be automated on a website. Returns confidence scores, tiers, selectors, and universal patterns. |
+| `execute_capability` | Get a structured execution plan with CSS selectors, fallbacks, and pattern-matched guidance. |
+| `report_outcome` | Report execution results with optional `browserObservations` to improve collective intelligence. |
+
+### OpenAI Skill
+
+AIR SDK is also available as an [OpenAI hosted shell skill](https://developers.openai.com/api/docs/guides/tools-skills) for `gpt-5.4` and `gpt-5.4-mini`:
+
+```bash
+# Package and upload
+cd air-sdk/openai-skill
+zip -r /tmp/air-sdk-skill.zip .
+curl -X POST 'https://api.openai.com/v1/skills' \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -F 'files=@/tmp/air-sdk-skill.zip'
+```
+
+Then use in the Responses API:
+
+```json
+{
+  "model": "gpt-5.4-mini",
+  "tools": [{
+    "type": "shell",
+    "environment": {
+      "type": "container_auto",
+      "skills": [{ "type": "skill_reference", "skill_id": "<your_skill_id>" }],
+      "network_policy": {
+        "type": "allowlist",
+        "allowed_domains": ["agentinternetruntime.com", "api.agentinternetruntime.com"],
+        "domain_secrets": [
+          { "domain": "api.agentinternetruntime.com", "name": "AIR_API_KEY", "value": "<key>" },
+          { "domain": "api.agentinternetruntime.com", "name": "Authorization", "value": "Bearer <key>" }
+        ]
+      }
+    }
+  }]
+}
+```
+
+Requires `api.agentinternetruntime.com` in your [org network allowlist](https://platform.openai.com/settings/organization/data-controls/hosted-tools).
 
 ## Configuration
 

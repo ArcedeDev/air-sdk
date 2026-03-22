@@ -17,8 +17,55 @@ const API_BASE = 'https://api.agentinternetruntime.com';
 const API_KEY = process.env.AIR_API_KEY;
 
 // ── Request helper ──
+// Node.js fetch() does not respect https_proxy env var.
+// OpenAI hosted containers route traffic through a mandatory proxy.
+// When a proxy is detected, fall back to curl which handles it natively.
+
+function useProxy() {
+  return !!(process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY);
+}
+
+async function requestViaCurl(method, path, body) {
+  const { execFileSync } = require('child_process');
+  const url = `${API_BASE}${path}`;
+  // In OpenAI hosted containers, domain_secrets injects the Authorization header
+  // via an auth-translation sidecar. We still pass it as fallback in case the
+  // sidecar doesn't handle it, but the real key may be a placeholder like __SECRET[...].
+  const args = [
+    '-s', '-X', method,
+    '-H', `User-Agent: AIR-SDK-OpenAI-Skill/${VERSION}`,
+    '--max-time', '30',
+  ];
+  // Only pass Authorization if we have a real key (not a sidecar placeholder)
+  if (API_KEY && !API_KEY.startsWith('__SECRET')) {
+    args.push('-H', `Authorization: Bearer ${API_KEY}`);
+  }
+  if (body) {
+    args.push('-H', 'Content-Type: application/json');
+    args.push('-d', JSON.stringify(body));
+  }
+  args.push(url);
+
+  try {
+    // execFileSync avoids shell interpretation — no injection risk
+    const stdout = execFileSync('curl', args, { encoding: 'utf-8', timeout: 35000 });
+    try {
+      return JSON.parse(stdout);
+    } catch {
+      // Proxy may return plain text errors like "Domain forbidden"
+      fatal(`API returned non-JSON: ${stdout.trim().slice(0, 200)}. Ensure api.agentinternetruntime.com is in your org network allowlist.`);
+    }
+  } catch (err) {
+    fatal(`Network error: ${err.message}`);
+  }
+}
 
 async function request(method, path, body) {
+  // Use curl when behind a proxy (OpenAI hosted containers)
+  if (useProxy()) {
+    return requestViaCurl(method, path, body);
+  }
+
   const url = `${API_BASE}${path}`;
   const hdrs = {
     'Authorization': `Bearer ${API_KEY}`,

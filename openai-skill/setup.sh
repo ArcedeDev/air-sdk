@@ -24,22 +24,19 @@ fi
 KEY_PREFIX=$(echo "$AIR_API_KEY" | cut -c1-12)
 echo "[AIR SDK] API key configured (${KEY_PREFIX}...)"
 
-# Test connectivity — API key passed via env var, NOT interpolated into command string
-RESPONSE=$(node -e '
-  const key = process.env.AIR_API_KEY;
-  fetch("https://api.agentinternetruntime.com/api/v1/sdk/capabilities?domain=example.com", {
-    headers: { "Authorization": "Bearer " + key },
-    signal: AbortSignal.timeout(10000)
-  })
-  .then(r => r.json())
-  .then(d => console.log(JSON.stringify({ ok: true, caps: (d.capabilities || []).length })))
-  .catch(e => console.log(JSON.stringify({ ok: false, error: e.message })));
-' 2>/dev/null)
+# Test connectivity — use curl (respects proxy) instead of Node fetch (doesn't)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $AIR_API_KEY" \
+  --max-time 10 \
+  "https://api.agentinternetruntime.com/api/v1/sdk/capabilities?domain=example.com" 2>/dev/null)
 
-if echo "$RESPONSE" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8")); process.exit(d.ok ? 0 : 1)' 2>/dev/null; then
-  echo "[AIR SDK] API connectivity verified"
+if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ] 2>/dev/null; then
+  echo "[AIR SDK] API connectivity verified (HTTP $HTTP_CODE)"
 else
-  echo "[AIR SDK] Warning: Could not reach API. Check network_policy allows api.agentinternetruntime.com"
+  echo "[AIR SDK] Warning: Could not reach API (HTTP $HTTP_CODE). Check network_policy allows api.agentinternetruntime.com"
 fi
 
-echo "[AIR SDK] Setup complete. Run: node /mnt/skills/air-sdk/air.js --help"
+# Resolve skill directory for the model to use
+SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "[AIR SDK] Skill directory: $SKILL_DIR"
+echo "[AIR SDK] Setup complete. Run: node $SKILL_DIR/air.js --help"
