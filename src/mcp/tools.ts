@@ -211,7 +211,7 @@ function logToolInteraction(
       browserInfo: { framework: 'other', headless: false, frameworkVersion: 'unknown' },
       executionTimeMs: 0,
     }],
-  }).catch(() => {}); // fire and forget
+  }).catch(() => { }); // fire and forget
 }
 
 // ---- Handlers ----
@@ -384,11 +384,11 @@ async function handleBrowseCapabilities(
 
     return textResult(
       `No indexed capabilities found for "${domain}" yet.\n\n` +
-        'AIR has registered your interest — this domain will be prioritized for capability discovery.\n\n' +
-        'You can still proceed:\n' +
-        `- **Call \`execute_capability\`** with the action you want (e.g., "search", "add_to_cart") — AIR will generate a heuristic execution plan\n` +
-        `- **Use \`extract_url\`** to get structured data from specific URLs on ${domain}\n\n` +
-        'After executing, call `report_outcome` — your report creates the first capability entry for this domain.'
+      'AIR has registered your interest — this domain will be prioritized for capability discovery.\n\n' +
+      'You can still proceed:\n' +
+      `- **Call \`execute_capability\`** with the action you want (e.g., "search", "add_to_cart") — AIR will generate a heuristic execution plan\n` +
+      `- **Use \`extract_url\`** to get structured data from specific URLs on ${domain}\n\n` +
+      'After executing, call `report_outcome` — your report creates the first capability entry for this domain.'
     );
   }
 
@@ -468,7 +468,7 @@ async function handleBrowseCapabilities(
     acc[t] = (acc[t] || 0) + 1;
     return acc;
   }, {});
-  lines.push(`\`[AIR-DIAG] domain=${domain} total=${sorted.length} ${Object.entries(tierSummary).map(([k,v]) => `${k}=${v}`).join(' ')}\``);
+  lines.push(`\`[AIR-DIAG] domain=${domain} total=${sorted.length} ${Object.entries(tierSummary).map(([k, v]) => `${k}=${v}`).join(' ')}\``);
   lines.push('');
 
   // CTA — 3-step workflow: browse → execute → report
@@ -1051,7 +1051,7 @@ async function handleReportOutcome(
   const rawSuccess = args?.success;
   const success = rawSuccess === undefined ? undefined
     : typeof rawSuccess === 'boolean' ? rawSuccess
-    : rawSuccess === 'true' || rawSuccess === 1;
+      : rawSuccess === 'true' || rawSuccess === 1;
 
   if (!domain) return errorResult('Missing required parameter: domain');
   if (!capability) return errorResult('Missing required parameter: capability');
@@ -1165,16 +1165,25 @@ async function handleReportOutcome(
 
   if (stepCount > 0) {
     const selectorsReported = steps.filter(s => s.selector && s.selector.trim() !== '').length;
+    // Determine if this report involves interactive browser actions (click, fill, type)
+    // vs URL-based navigation (navigate, goto, url_pattern) where selectors don't apply
+    const URL_ONLY_ACTIONS = new Set(['navigate', 'goto', 'url_pattern', 'open', 'url', 'extract']);
+    const hasInteractiveSteps = steps.some(s => !URL_ONLY_ACTIONS.has(s.action?.toLowerCase?.() || ''));
+
     lines.push(`**Selectors captured:** ${selectorsReported} of ${stepCount} steps included CSS selectors.`);
-    if (selectorsReported === 0) {
+    if (selectorsReported === 0 && hasInteractiveSteps) {
+      // Interactive browser actions (click, fill, type) should have selectors
       lines.push('');
       lines.push('⚠️ **No CSS selectors were included in your report.** This report cannot be used for macro synthesis.');
       lines.push('Please call `report_outcome` again with the actual CSS selectors from your browser tool calls.');
       lines.push('Look at your click/fill/type tool calls above — each one used a CSS selector. Copy those into the steps array.');
       lines.push('');
       lines.push('Example: `{ action: "click", selector: "input#twotabsearchtextbox", success: true }`');
-    } else if (selectorsReported < stepCount - 1) {
-      // Allow 1 missing (navigate steps often have no selector)
+    } else if (selectorsReported === 0 && !hasInteractiveSteps) {
+      // URL-based navigation only — no selectors expected
+      lines.push('> URL-based navigation — no CSS selectors expected. This report helps AIR learn URL patterns for this domain.');
+    } else if (selectorsReported < stepCount - 1 && hasInteractiveSteps) {
+      // Some interactive steps missing selectors
       lines.push(`> ${stepCount - selectorsReported} steps are missing selectors. Include selectors for click, fill, and extract actions to maximize macro quality.`);
     }
   }
