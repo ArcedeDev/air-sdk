@@ -42,7 +42,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // 2. Resolve SDK config with sensible server-side defaults
+  // 2. Detect which MCP client is running us
+  const clientId = process.env.AIR_CLIENT_ID  // explicit override
+    || (process.env.CLAUDE_DESKTOP ? 'claude-desktop' : null)
+    || (process.env.CURSOR_TRACE_ID ? 'cursor' : null)
+    || (process.env.WINDSURF_SESSION_ID ? 'windsurf' : null)
+    || 'mcp-generic';
+
+  // 3. Resolve SDK config with sensible server-side defaults
   const config = resolveConfig({
     apiKey,
     baseURL: process.env.AIR_BASE_URL,
@@ -50,6 +57,8 @@ async function main(): Promise<void> {
     includeExecution: true, // MCP server always wants rich execution data
     telemetryEnabled: false, // MCP server doesn't generate telemetry
     debug: process.env.AIR_DEBUG === 'true',
+    clientId,
+    sdkVersion: SDK_VERSION,
   });
 
   // 3. Create shared instances

@@ -209,6 +209,21 @@ export class CapabilityCache {
 
       return capabilities;
     } catch (err: any) {
+      // Propagate quota/auth errors so MCP tools can show helpful messages
+      if (err?.status === 429 || err?.status === 401 || err?.status === 403) {
+        throw err;
+      }
+      // Try to detect quota_exceeded from response body
+      if (err?.response && typeof err.response.json === 'function') {
+        try {
+          const body = await err.response.json();
+          if (body?.error === 'quota_exceeded' || body?.error === 'invalid_api_key') {
+            throw Object.assign(err, { _parsedBody: body });
+          }
+        } catch (parseErr) {
+          if (parseErr === err) throw err; // re-throw if it's our enriched error
+        }
+      }
       this.handleError('network_error', 'Failed to fetch capabilities for ' + domain + ': ' + err.message);
       return [];
     }

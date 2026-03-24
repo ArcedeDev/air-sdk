@@ -288,7 +288,27 @@ async function handleExtractUrl(
       url,
       options: force ? { force: true } : {},
     });
-  } catch {
+  } catch (err: any) {
+    // Parse structured errors from the API (quota exceeded, auth failures, etc.)
+    if (err?.response && typeof err.response.json === 'function') {
+      try {
+        const body = await err.response.json();
+        if (body?.error === 'quota_exceeded') {
+          return errorResult(
+            `SDK quota exceeded: ${body.message || 'Monthly execution limit reached.'}` +
+            '\n\nUpgrade your plan or wait for the monthly reset. Dashboard: https://agentinternetruntime.com/extract/dashboard/sdk'
+          );
+        }
+        if (body?.error === 'invalid_api_key') {
+          return errorResult('Invalid API key. Check your AIR_API_KEY environment variable.');
+        }
+        if (body?.error) {
+          return errorResult(`API error: ${body.message || body.error}`);
+        }
+      } catch {
+        // Response body not parseable — fall through to generic error
+      }
+    }
     return errorResult(
       `Extraction failed for "${url}". The extract API may be unavailable or the URL is invalid.`
     );
@@ -373,7 +393,27 @@ async function handleBrowseCapabilities(
     return errorResult('Missing required parameter: domain');
   }
 
-  const capabilities = await cache.getCapabilities(domain);
+  let capabilities: Awaited<ReturnType<typeof cache.getCapabilities>>;
+  try {
+    capabilities = await cache.getCapabilities(domain);
+  } catch (err: any) {
+    // Surface quota/auth errors instead of silently returning empty results
+    const body = err?._parsedBody;
+    if (body?.error === 'quota_exceeded' || err?.status === 429) {
+      return errorResult(
+        `SDK quota exceeded: ${body?.message || 'Monthly execution limit reached.'}` +
+        '\n\nUpgrade your plan or wait for the monthly reset. Dashboard: https://agentinternetruntime.com/extract/dashboard/sdk'
+      );
+    }
+    if (body?.error === 'invalid_api_key' || err?.status === 401) {
+      return errorResult('Invalid API key. Check your AIR_API_KEY environment variable.');
+    }
+    if (err?.status === 403) {
+      return errorResult('Access denied. Your API key may not have permission for this endpoint.');
+    }
+    // For other network errors, fall through to "no capabilities" message
+    capabilities = [];
+  }
 
   if (capabilities.length === 0) {
     // Fire demand signal — domain requested but no data available
@@ -591,7 +631,22 @@ async function handleExecuteCapability(
   if (!capability) return errorResult('Missing required parameter: capability');
 
   // Fetch the capability metadata first for entryUrl context
-  const capabilities = await cache.getCapabilities(domain);
+  let capabilities: Awaited<ReturnType<typeof cache.getCapabilities>>;
+  try {
+    capabilities = await cache.getCapabilities(domain);
+  } catch (err: any) {
+    const body = err?._parsedBody;
+    if (body?.error === 'quota_exceeded' || err?.status === 429) {
+      return errorResult(
+        `SDK quota exceeded: ${body?.message || 'Monthly execution limit reached.'}` +
+        '\n\nUpgrade your plan or wait for the monthly reset. Dashboard: https://agentinternetruntime.com/extract/dashboard/sdk'
+      );
+    }
+    if (body?.error === 'invalid_api_key' || err?.status === 401) {
+      return errorResult('Invalid API key. Check your AIR_API_KEY environment variable.');
+    }
+    capabilities = [];
+  }
   const capMeta = capabilities.find(c => c.name === capability);
 
   // Fire demand signal — execution attempted
@@ -601,7 +656,12 @@ async function handleExecuteCapability(
     tier: capMeta?.executionTier,
   });
 
-  const macro = await cache.getMacroForCapability(domain, capability);
+  let macro: Awaited<ReturnType<typeof cache.getMacroForCapability>> = null;
+  try {
+    macro = await cache.getMacroForCapability(domain, capability);
+  } catch {
+    // Already surfaced quota/auth error above — macro lookup is best-effort here
+  }
 
   // Generate a request ID for cross-request correlation.
   // This links execute_capability → report_outcome in telemetry.
@@ -1067,18 +1127,28 @@ async function handleReportOutcome(
   const executionTier = (args?.executionTier as string) ?? null;
 
   // Build enriched action sequence with selector validation data
-  const actionSequence = steps.map(s => ({
-    type: s.action,
-    selector: s.selector,
-    // Redact user-entered values to prevent PII leakage into telemetry
-    value: s.value ? '[REDACTED]' : null,
-    success: s.success,
-    durationMs: 0,
-    // Selector validation fields (new — feeds the validation loop)
-    airProvidedSelector: s.airProvidedSelector ?? null,
-    selectorMatched: s.selectorMatched ?? null,
-    fallbackUsed: s.fallbackUsed ?? null,
-  }));
+  const URL_ACTIONS = new Set(['navigate', 'goto', 'open', 'url']);
+  const actionSequence = steps.map(s => {
+    const actionLower = (s.action || '').toLowerCase();
+    // Keep URLs for navigation actions (public paths, needed for URL template extraction)
+    // Redact values for interactive actions (fill, type) to prevent PII leakage
+    const isNavigation = URL_ACTIONS.has(actionLower);
+    const value = isNavigation
+      ? (s.value || null)  // URLs are public — preserve for template extraction
+      : (s.value ? '[REDACTED]' : null);  // Form values may contain PII — redact
+
+    return {
+      type: s.action,
+      selector: s.selector,
+      value,
+      success: s.success,
+      durationMs: 0,
+      // Selector validation fields (feeds the validation loop)
+      airProvidedSelector: s.airProvidedSelector ?? null,
+      selectorMatched: s.selectorMatched ?? null,
+      fallbackUsed: s.fallbackUsed ?? null,
+    };
+  });
 
   // Send telemetry report to the cloud
   try {

@@ -33,6 +33,10 @@ export interface AIRConfig {
   mpp?: MPPConfig;
   /** Include rich execution intelligence fields in capability responses */
   includeExecution?: boolean;
+  /** Client identifier sent as X-AIR-Client header (e.g., 'claude-desktop', 'cursor') */
+  clientId?: string;
+  /** SDK version sent as X-AIR-SDK-Version header */
+  sdkVersion?: string;
 }
 
 /** Fully resolved config with all defaults applied */
@@ -48,6 +52,10 @@ export interface ResolvedAIRConfig {
   onError?: (error: AIRError) => void;
   mpp?: MPPConfig;
   includeExecution?: boolean;
+  /** Client identifier sent as X-AIR-Client header (e.g., 'claude-desktop', 'cursor', 'air-sdk') */
+  clientId?: string;
+  /** SDK version sent as X-AIR-SDK-Version header */
+  sdkVersion?: string;
 }
 
 // ============================================================

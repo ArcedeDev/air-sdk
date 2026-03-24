@@ -28,6 +28,8 @@ export function resolveConfig(userConfig: AIRConfig): ResolvedAIRConfig {
     onError: userConfig.onError,
     mpp: userConfig.mpp,
     includeExecution: userConfig.includeExecution,
+    clientId: userConfig.clientId,
+    sdkVersion: userConfig.sdkVersion,
   };
 }
 

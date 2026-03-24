@@ -30,7 +30,9 @@ export class AIRHttpClient {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'X-AIR-Client': this.config.clientId || 'air-sdk',
+          'X-AIR-SDK-Version': this.config.sdkVersion || '0.3.0',
         },
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal
