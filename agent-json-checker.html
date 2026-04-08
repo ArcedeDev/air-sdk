@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent.json Checker — Is Your Site Agent-Ready? | Arcede</title>
+<meta name="description" content="Check if any website has an agent.json file. See if sites are ready for the software agent economy. Free tool by Arcede.">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.hero{text-align:center;padding:80px 20px 40px}
+.hero h1{font-size:2.4rem;font-weight:700;letter-spacing:-0.02em;background:linear-gradient(135deg,#fff,#a0a0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{margin-top:12px;font-size:1.1rem;color:#888;max-width:540px}
+.checker{width:100%;max-width:560px;padding:0 20px;margin-top:20px}
+.input-row{display:flex;gap:8px}
+.input-row input{flex:1;padding:14px 18px;border-radius:12px;border:1px solid #333;background:#161616;color:#fff;font-size:1rem;outline:none;transition:border-color .2s}
+.input-row input:focus{border-color:#6366f1}
+.input-row button{padding:14px 28px;border-radius:12px;border:none;background:#6366f1;color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:background .2s}
+.input-row button:hover{background:#4f46e5}
+.input-row button:disabled{background:#333;cursor:not-allowed}
+.result{margin-top:24px;padding:20px;border-radius:12px;border:1px solid #222;background:#111;display:none}
+.result.found{border-color:#22c55e}
+.result.not-found{border-color:#ef4444}
+.result.error{border-color:#f59e0b}
+.result h3{font-size:1.1rem;margin-bottom:8px}
+.result pre{background:#0a0a0a;padding:12px;border-radius:8px;overflow-x:auto;font-size:0.85rem;color:#aaa;max-height:300px;overflow-y:auto}
+.found h3{color:#22c55e}
+.not-found h3{color:#ef4444}
+.error h3{color:#f59e0b}
+.stats{display:flex;gap:32px;margin-top:60px;text-align:center}
+.stat-num{font-size:2rem;font-weight:700;color:#6366f1}
+.stat-label{font-size:0.85rem;color:#666;margin-top:4px}
+.about{max-width:560px;padding:60px 20px;text-align:center}
+.about h2{font-size:1.4rem;margin-bottom:12px;color:#ccc}
+.about p{color:#777;line-height:1.7;font-size:0.95rem}
+.about a{color:#6366f1;text-decoration:none}
+.about a:hover{text-decoration:underline}
+footer{padding:40px 20px;color:#444;font-size:0.85rem;text-align:center}
+footer a{color:#666;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="hero">
+<h1>agent.json Checker</h1>
+<p>Check if any website is ready for software agents. The <code>agent.json</code> standard tells agents what they can do on a site — like robots.txt, but for agents.</p>
+</div>
+<div class="checker">
+<div class="input-row">
+<input type="text" id="url" placeholder="Enter a domain (e.g. github.com)" autocomplete="off">
+<button id="check" onclick="checkSite()">Check</button>
+</div>
+<div class="result" id="result"></div>
+</div>
+<div class="stats">
+<div><div class="stat-num" id="checked-count">0</div><div class="stat-label">Sites checked</div></div>
+<div><div class="stat-num" id="found-count">0</div><div class="stat-label">With agent.json</div></div>
+<div><div class="stat-num" id="pct">0%</div><div class="stat-label">Adoption rate</div></div>
+</div>
+<div class="about">
+<h2>What is agent.json?</h2>
+<p>As software agents become the primary way software interacts with the web, sites need a machine-readable way to declare what agents can do. <code>agent.json</code> is an emerging standard — a file at <code>/.well-known/agent.json</code> that describes capabilities, authentication requirements, and rate limits for software agents.</p>
+<p style="margin-top:16px">Most sites don't have one yet. That's the opportunity. <a href="https://github.com/ArcedeDev/air-sdk" target="_blank">AIR SDK</a> by Arcede builds collective intelligence so agents know what to do on any site — even without agent.json.</p>
+</div>
+<footer>Built by <a href="https://arcede.com" target="_blank">Arcede</a> — Making the open agent internet.</footer>
+<script>
+let checked=0,found=0;
+const el=id=>document.getElementById(id);
+function normalize(u){u=u.trim().replace(/^https?:\/\//,'').replace(/\/.*$/,'');return u}
+async function checkSite(){
+  const btn=el('check'),inp=el('url'),res=el('result');
+  const domain=normalize(inp.value);
+  if(!domain){inp.focus();return}
+  btn.disabled=true;btn.textContent='Checking...';
+  res.style.display='none';res.className='result';
+  const urls=[`https://${domain}/.well-known/agent.json`,`https://${domain}/agent.json`];
+  let found_data=null,tried=[];
+  for(const url of urls){
+    tried.push(url);
+    try{
+      const r=await fetch(url,{mode:'cors',signal:AbortSignal.timeout(5000)});
+      if(r.ok){const t=await r.text();try{JSON.parse(t);found_data={url,data:t}}catch(e){}}
+    }catch(e){}
+  }
+  checked++;
+  if(found_data){
+    found++;
+    res.className='result found';
+    res.innerHTML=`<h3>✓ agent.json found!</h3><p style="color:#aaa;margin-bottom:8px">${found_data.url}</p><pre>${escHtml(found_data.data)}</pre>`;
+  }else{
+    // Most sites won't have it — that's the pitch
+    res.className='result not-found';
+    res.innerHTML=`<h3>✗ No agent.json found</h3><p style="color:#aaa;margin-bottom:8px">Checked: ${tried.join(', ')}</p><p style="color:#777;margin-top:8px">Most sites aren't agent-ready yet. <a href="https://github.com/ArcedeDev/air-sdk" style="color:#6366f1">AIR SDK</a> fills this gap with collective intelligence — agents share what works so your agent doesn't have to guess.</p>`;
+  }
+  res.style.display='block';
+  el('checked-count').textContent=checked;
+  el('found-count').textContent=found;
+  el('pct').textContent=checked?Math.round(found/checked*100)+'%':'0%';
+  btn.disabled=false;btn.textContent='Check';
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+el('url').addEventListener('keydown',e=>{if(e.key==='Enter')checkSite()});
+</script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser Agent Cost Calculator — How Much Are Your AI Agents Spending? | Arcede</title>
+<meta name="description" content="Calculate the real cost of running browser automation agents. Compare token costs across approaches and see how collective intelligence cuts costs dramatically.">
+<meta property="og:title" content="Browser Agent Cost Calculator | Arcede">
+<meta property="og:description" content="Find out how much your AI browser agents really cost per task. Free calculator.">
+<meta property="og:type" content="website">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--card:#141414;--border:#222;--text:#e5e5e5;--muted:#888;--accent:#3b82f6;--accent2:#8b5cf6;--green:#22c55e;--red:#ef4444}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+.container{max-width:720px;margin:0 auto;padding:40px 20px}
+h1{font-size:28px;font-weight:700;letter-spacing:-0.5px;margin-bottom:8px}
+.subtitle{color:var(--muted);font-size:15px;margin-bottom:32px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+.card h2{font-size:18px;font-weight:600;margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:500}
+input[type=number],select{width:100%;background:#1a1a1a;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:15px;margin-bottom:16px;outline:none;transition:border-color .2s}
+input[type=number]:focus,select:focus{border-color:var(--accent)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.results{display:none}
+.result-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)}
+.result-row:last-child{border-bottom:none}
+.result-label{font-size:14px;color:var(--muted)}
+.result-value{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.savings{color:var(--green);font-size:24px}
+.expensive{color:var(--red)}
+.cheap{color:var(--green)}
+.btn{display:block;width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:14px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn:hover{opacity:.9}
+.bar-container{margin-bottom:12px}
+.bar-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.bar-track{height:24px;background:#1a1a1a;border-radius:6px;overflow:hidden}
+.bar-fill{height:100%;border-radius:6px;transition:width .6s ease}
+.footnote{font-size:12px;color:var(--muted);margin-top:24px;line-height:1.5}
+.badge{display:inline-block;background:var(--accent2);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.cta{text-align:center;margin-top:32px;padding:24px;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;border:1px solid #2a2a4a}
+.cta h3{font-size:18px;margin-bottom:8px}
+.cta p{color:var(--muted);font-size:14px;margin-bottom:16px}
+.cta .btn{max-width:280px;margin:0 auto;background:var(--accent2)}
+@media(max-width:480px){.row{grid-template-columns:1fr}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Browser Agent Cost Calculator</h1>
+<p class="subtitle">How much are your AI agents really spending on web tasks?</p>
+
+<div class="card">
+<h2>Your Agent Setup</h2>
+<div class="row">
+<div>
+<label>Tasks per day</label>
+<input type="number" id="tasks" value="100" min="1" max="100000">
+</div>
+<div>
+<label>LLM model</label>
+<select id="model">
+<option value="claude" selected>Claude Sonnet 4 ($3/$15 per MTok)</option>
+<option value="gpt4o">GPT-4o ($2.50/$10 per MTok)</option>
+<option value="opus">Claude Opus 4 ($15/$75 per MTok)</option>
+<option value="gemini">Gemini 2.5 Pro ($1.25/$10 per MTok)</option>
+</select>
+</div>
+</div>
+<div class="row">
+<div>
+<label>Avg tokens per page (DOM dump)</label>
+<input type="number" id="tokensPerPage" value="85000" min="1000" max="500000">
+</div>
+<div>
+<label>Pages visited per task</label>
+<input type="number" id="pagesPerTask" value="4" min="1" max="50">
+</div>
+</div>
+<div class="row">
+<div>
+<label>Agent reasoning tokens per step</label>
+<input type="number" id="reasoningTokens" value="2000" min="100" max="50000">
+</div>
+<div>
+<label>Steps per task</label>
+<input type="number" id="stepsPerTask" value="6" min="1" max="50">
+</div>
+</div>
+<button class="btn" onclick="calculate()">Calculate Costs</button>
+</div>
+
+<div class="results" id="results">
+<div class="card">
+<h2>Cost Breakdown — Raw DOM Approach</h2>
+<div class="result-row">
+<span class="result-label">Input tokens per task</span>
+<span class="result-value" id="inputTokens"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Output tokens per task</span>
+<span class="result-value" id="outputTokens"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Cost per task</span>
+<span class="result-value expensive" id="costPerTask"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Daily cost</span>
+<span class="result-value expensive" id="dailyCost"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Monthly cost (30 days)</span>
+<span class="result-value expensive" id="monthlyCost"></span>
+</div>
+</div>
+
+<div class="card">
+<h2>With Collective Intelligence <span class="badge">Cached Macros</span></h2>
+<p style="color:var(--muted);font-size:13px;margin-bottom:16px">Pre-verified macros skip DOM parsing. Average 12 tokens per cached step vs 85,000 per raw page read.</p>
+<div class="result-row">
+<span class="result-label">Cost per task (cached macro)</span>
+<span class="result-value cheap" id="airCostPerTask"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Daily cost</span>
+<span class="result-value cheap" id="airDailyCost"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Monthly cost</span>
+<span class="result-value cheap" id="airMonthlyCost"></span>
+</div>
+<div class="result-row">
+<span class="result-label">Monthly savings</span>
+<span class="result-value savings" id="monthlySavings"></span>
+</div>
+</div>
+
+<div class="card">
+<h2>Visual Comparison</h2>
+<div class="bar-container">
+<div class="bar-label"><span>Raw DOM</span><span id="barRawLabel"></span></div>
+<div class="bar-track"><div class="bar-fill" id="barRaw" style="width:0;background:var(--red)"></div></div>
+</div>
+<div class="bar-container">
+<div class="bar-label"><span>Collective Intelligence</span><span id="barAirLabel"></span></div>
+<div class="bar-track"><div class="bar-fill" id="barAir" style="width:0;background:var(--green)"></div></div>
+</div>
+<p class="footnote">Collective intelligence means every agent's interaction teaches the system. Macro hit rates improve over time — the more agents use it, the cheaper tasks become for everyone. <a href="https://github.com/ArcedeDev/air-sdk" target="_blank">Learn more on GitHub</a></p>
+</div>
+
+<div class="cta">
+<h3>Stop overpaying for browser automation</h3>
+<p>AIR SDK is an open MCP server. Install in 30 seconds, start saving immediately.</p>
+<a href="https://github.com/ArcedeDev/air-sdk" target="_blank" class="btn">npm install @anthropic/air-sdk</a>
+</div>
+</div>
+</div>
+
+<script>
+const MODELS={claude:{input:3,output:15},gpt4o:{input:2.5,output:10},opus:{input:15,output:75},gemini:{input:1.25,output:10}};
+function fmt(n){if(n>=1e6)return'$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return'$'+(n/1e3).toFixed(1)+'K';if(n>=1)return'$'+n.toFixed(2);if(n>=0.01)return'$'+n.toFixed(3);return'$'+n.toFixed(4)}
+function fmtNum(n){return n.toLocaleString()}
+function calculate(){
+var t=+document.getElementById('tasks').value,m=MODELS[document.getElementById('model').value],tp=+document.getElementById('tokensPerPage').value,pp=+document.getElementById('pagesPerTask').value,rt=+document.getElementById('reasoningTokens').value,sp=+document.getElementById('stepsPerTask').value;
+var ipt=tp*pp+rt*sp,opt=rt*sp;
+var cpt=(ipt/1e6)*m.input+(opt/1e6)*m.output;
+var dc=cpt*t,mc=dc*30;
+var ai=12*sp+500,ao=200;
+var acpt=(ai/1e6)*m.input+(ao/1e6)*m.output;
+var adc=acpt*t,amc=adc*30;
+document.getElementById('inputTokens').textContent=fmtNum(ipt);
+document.getElementById('outputTokens').textContent=fmtNum(opt);
+document.getElementById('costPerTask').textContent=fmt(cpt);
+document.getElementById('dailyCost').textContent=fmt(dc);
+document.getElementById('monthlyCost').textContent=fmt(mc);
+document.getElementById('airCostPerTask').textContent=fmt(acpt);
+document.getElementById('airDailyCost').textContent=fmt(adc);
+document.getElementById('airMonthlyCost').textContent=fmt(amc);
+document.getElementById('monthlySavings').textContent=fmt(mc-amc);
+document.getElementById('barRaw').style.width='100%';
+var pct=Math.max(1,(amc/mc)*100);
+document.getElementById('barAir').style.width=pct+'%';
+document.getElementById('barRawLabel').textContent=fmt(mc)+'/mo';
+document.getElementById('barAirLabel').textContent=fmt(amc)+'/mo';
+document.getElementById('results').style.display='block';
+document.getElementById('results').scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>

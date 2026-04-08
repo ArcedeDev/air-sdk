@@ -41,6 +41,10 @@ export const tools = [
           type: 'boolean',
           description: 'Bypass cache for fresh extraction (default: false, uses cache when available)',
         },
+        full_text: {
+          type: 'boolean',
+          description: 'Return the full page plaintext in content.text (default: false). Useful for document import pipelines that need the complete page content rather than just structured items.',
+        },
       },
       required: ['url'],
     },
@@ -182,6 +186,32 @@ export const tools = [
       required: ['domain', 'capability', 'success'],
     },
   },
+  {
+    name: 'extract_content',
+    description:
+      'Extract text and structured sections from a file (PDF, DOCX, PPTX, XLSX, CSV, TXT, MD, HTML, EML). ' +
+      'Returns the same ExtractionResult shape as extract_url: title, sections (as content items), full text, ' +
+      'and diagnostics. Any agent can use this — no browser needed. ' +
+      'Accepts a file URL (HTTP/HTTPS) which will be fetched and uploaded, or a local file path for desktop agents. ' +
+      'Use this for document import pipelines: extract_content → research_import.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        file_url: {
+          type: 'string',
+          description: 'URL to fetch the file from (HTTP/HTTPS). Provide either file_url or file_path, not both.',
+        },
+        file_path: {
+          type: 'string',
+          description: 'Local file path (for desktop agents). Provide either file_url or file_path, not both.',
+        },
+        force_ocr: {
+          type: 'boolean',
+          description: 'Force OCR for scanned PDFs (default: false). Only applies to PDF files.',
+        },
+      },
+    },
+  },
 ] as const;
 
 // ---- Implicit Telemetry Helper ----
@@ -238,6 +268,8 @@ export async function handleToolCall(
         return await handleExecuteCapability(args, cache, httpClient);
       case 'report_outcome':
         return await handleReportOutcome(args, httpClient);
+      case 'extract_content':
+        return await handleExtractContent(args, httpClient);
       default:
         return errorResult(`Unknown tool: ${toolName}`);
     }
@@ -255,7 +287,7 @@ interface ExtractApiResponse {
     title?: string;
     description?: string;
     url?: string;
-    content?: { type?: string; items?: unknown[] };
+    content?: { type?: string; items?: unknown[]; text?: string };
     diagnostics?: {
       extractionMethod?: string;
       confidenceScore?: number;
@@ -281,12 +313,17 @@ async function handleExtractUrl(
   }
 
   const force = (args?.force as boolean) ?? false;
+  const fullText = (args?.full_text as boolean) ?? false;
+
+  const options: Record<string, unknown> = {};
+  if (force) options.force = true;
+  if (fullText) options.fullText = true;
 
   let response: ExtractApiResponse;
   try {
     response = await httpClient.post<ExtractApiResponse>('/api/v1/extract', {
       url,
-      options: force ? { force: true } : {},
+      options,
     });
   } catch (err: any) {
     // Parse structured errors from the API (quota exceeded, auth failures, etc.)
@@ -363,6 +400,14 @@ async function handleExtractUrl(
   // Compact diagnostics line for easy agent logging and test analysis
   lines.push('');
   lines.push(`\`[AIR-DIAG] method=${diag?.extractionMethod || 'unknown'} confidence=${diag?.confidenceScore?.toFixed(2) || '0'} items=${itemCount} cached=${diag?.servedFromCache || false} credits=${response.credits_used ?? 0}\``);
+
+  // Include full page text when requested and available
+  if (fullText && d.content?.text) {
+    lines.push('');
+    lines.push('### Full Text');
+    lines.push('');
+    lines.push(d.content.text);
+  }
 
   // Include content summary
   if (d.content?.items && Array.isArray(d.content.items) && d.content.items.length > 0) {
@@ -1276,6 +1321,182 @@ async function handleReportOutcome(
       'need browser rendering and improves future extraction quality.');
     if (browserObs.contentQualityVsBrowser === 'browser_much_better') {
       lines.push(`> Domain \`${domain}\` flagged as requiring browser rendering for quality extraction.`);
+    }
+  }
+
+  return textResult(lines.join('\n'));
+}
+
+// ---- extract_content ----
+
+interface ExtractContentApiResponse {
+  success: boolean;
+  data?: {
+    title?: string;
+    description?: string;
+    url?: string;
+    content?: { type?: string; items?: Array<{ title?: string; description?: string; attributes?: Record<string, string> }>; text?: string };
+    metadata?: Record<string, any>;
+    diagnostics?: {
+      extractionMethod?: string;
+      confidenceScore?: number;
+      itemsExtracted?: number;
+      extractionTimeMs?: number;
+      sourceType?: string;
+    };
+  };
+  credits_used?: number;
+  credits_remaining?: number;
+  error?: string;
+  message?: string;
+  warnings?: string[];
+}
+
+async function handleExtractContent(
+  args: Record<string, unknown> | undefined,
+  httpClient: AIRHttpClient
+): Promise<McpToolResult> {
+  const fileUrl = args?.file_url as string | undefined;
+  const filePath = args?.file_path as string | undefined;
+  const forceOcr = (args?.force_ocr as boolean) ?? false;
+
+  if (!fileUrl && !filePath) {
+    return errorResult('Provide either file_url (HTTP/HTTPS URL) or file_path (local path).');
+  }
+  if (fileUrl && filePath) {
+    return errorResult('Provide either file_url or file_path, not both.');
+  }
+
+  // For file_url: fetch the file first, then upload to the API
+  // For file_path: read from local filesystem (desktop agent context)
+  let fileBlob: Blob;
+  let fileName: string;
+
+  if (fileUrl) {
+    try {
+      const resp = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
+      if (!resp.ok) {
+        return errorResult(`Failed to fetch file from URL: ${resp.status} ${resp.statusText}`);
+      }
+      fileBlob = await resp.blob();
+      // Derive filename from URL path
+      const urlPath = new URL(fileUrl).pathname;
+      fileName = urlPath.split('/').pop() || 'document';
+    } catch (err: any) {
+      return errorResult(`Failed to fetch file from URL: ${err?.message || 'Unknown error'}`);
+    }
+  } else {
+    // Local file path — use Node.js fs (available in desktop agent runtime)
+    try {
+      const { promises: fsp } = await import('fs');
+      const path = await import('path');
+      const buffer = await fsp.readFile(filePath!);
+      fileBlob = new Blob([buffer]);
+      fileName = path.basename(filePath!);
+    } catch (err: any) {
+      return errorResult(`Failed to read local file: ${err?.message || 'Unknown error'}`);
+    }
+  }
+
+  // Upload to /api/v1/extract-content
+  let response: ExtractContentApiResponse;
+  try {
+    const formData = new FormData();
+    formData.append('file', fileBlob, fileName);
+    if (forceOcr) formData.append('force_ocr', 'true');
+
+    response = await httpClient.postFormData<ExtractContentApiResponse>(
+      '/api/v1/extract-content',
+      formData
+    );
+  } catch (err: any) {
+    // Try to parse structured errors
+    if (err?.response && typeof err.response.json === 'function') {
+      try {
+        const body = await err.response.json();
+        if (body?.error) {
+          return errorResult(`API error: ${body.message || body.error}`);
+        }
+      } catch {
+        // Fall through
+      }
+    }
+    return errorResult(`File extraction failed: ${err?.message || 'Content worker may be unavailable.'}`);
+  }
+
+  if (!response.success || !response.data) {
+    return errorResult(`Extraction failed: ${response.error || response.message || 'Unknown error'}`);
+  }
+
+  const d = response.data;
+  const diag = d.diagnostics;
+  const sectionCount = d.content?.items?.length ?? 0;
+
+  // Fire demand signal
+  try {
+    logToolInteraction(httpClient, 'extract_content', fileName, {
+      hit: true,
+      count: sectionCount,
+      tier: 'file_extraction',
+    });
+  } catch {
+    // Skip telemetry errors
+  }
+
+  const lines = [
+    `## ${d.title || fileName}`,
+    '',
+  ];
+
+  if (d.description) {
+    lines.push(d.description.slice(0, 300));
+    lines.push('');
+  }
+
+  lines.push(`**Source:** ${fileUrl || filePath}`);
+  lines.push(`**Parser:** ${diag?.extractionMethod || 'unknown'}`);
+  lines.push(`**Confidence:** ${diag?.confidenceScore !== undefined ? (diag.confidenceScore * 100).toFixed(0) + '%' : 'unknown'}`);
+  lines.push(`**Sections:** ${sectionCount}`);
+  lines.push(`**Time:** ${diag?.extractionTimeMs || 0}ms`);
+
+  if (d.metadata) {
+    if (d.metadata.pageCount) lines.push(`**Pages:** ${d.metadata.pageCount}`);
+    if (d.metadata.wordCount) lines.push(`**Words:** ${d.metadata.wordCount}`);
+    if (d.metadata.ocrStatus && d.metadata.ocrStatus !== 'not_required') {
+      lines.push(`**OCR:** ${d.metadata.ocrStatus}`);
+    }
+  }
+
+  if (response.credits_used !== undefined) {
+    lines.push(`**Credits:** ${response.credits_used} used | ${response.credits_remaining ?? '?'} remaining`);
+  }
+
+  if (response.warnings && response.warnings.length > 0) {
+    lines.push('');
+    lines.push('**Warnings:** ' + response.warnings.join('; '));
+  }
+
+  lines.push('');
+  lines.push(`\`[AIR-DIAG] method=${diag?.extractionMethod || 'unknown'} confidence=${diag?.confidenceScore?.toFixed(2) || '0'} sections=${sectionCount} credits=${response.credits_used ?? 0}\``);
+
+  // Include full text
+  if (d.content?.text) {
+    lines.push('');
+    lines.push('### Full Text');
+    lines.push('');
+    lines.push(d.content.text);
+  }
+
+  // Include section listing (without full_text attribute to save context)
+  if (d.content?.items && d.content.items.length > 0) {
+    lines.push('');
+    lines.push('### Sections');
+    for (const item of d.content.items.slice(0, 20)) {
+      const wordCount = item.attributes?.word_count || '?';
+      lines.push(`- **${item.title || 'Untitled'}** (${wordCount} words)`);
+    }
+    if (d.content.items.length > 20) {
+      lines.push(`- ... and ${d.content.items.length - 20} more sections`);
     }
   }
 

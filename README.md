@@ -87,6 +87,17 @@ npx @arcede/air-sdk install-skill   # auto-configures Claude Desktop, Claude Cod
 
 Free tier included. No credit card. Make the network smarter, star the repo and share it ⭐
 
+### Lightweight Alternatives
+
+Don't need the full SDK? We publish standalone packages for common use cases:
+
+| Package | Install | Use case |
+|---------|---------|----------|
+| [`@arcede/air-mcp`](https://www.npmjs.com/package/@arcede/air-mcp) | `npx @arcede/air-mcp` | MCP server only — add AIR tools to Claude Code, Cursor, or Windsurf without the full SDK |
+| [`@arcede/air-cli`](https://www.npmjs.com/package/@arcede/air-cli) | `npx @arcede/air-cli` | Terminal CLI — extract data and query capabilities from the command line |
+| [`@arcede/extract`](https://www.npmjs.com/package/@arcede/extract) | `npm i @arcede/extract` | Typed TypeScript client for the Extract API only |
+| [`@arcede/capabilities`](https://www.npmjs.com/package/@arcede/capabilities) | `npm i @arcede/capabilities` | Typed TypeScript client for the Capability API only |
+
 ## Quick Start
 
 Wrap your existing Playwright page. Nothing else changes.
