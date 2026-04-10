@@ -246,6 +246,7 @@ claude mcp add air-sdk -e AIR_API_KEY=your_key_here -- air-sdk --mcp
 | `browse_capabilities` | Discover what actions can be automated on a website. Returns confidence scores, tiers, selectors, and universal patterns. |
 | `execute_capability` | Get a structured execution plan with CSS selectors, fallbacks, and pattern-matched guidance. |
 | `report_outcome` | Report execution results with optional `browserObservations` to improve collective intelligence. |
+| `extract_content` | Extract text and structured sections from local files or remote file URLs such as PDFs, DOCX, PPTX, XLSX, CSV, TXT, MD, HTML, and EML. |
 
 ### OpenAI Skill
 

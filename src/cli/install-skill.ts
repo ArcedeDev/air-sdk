@@ -189,8 +189,8 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
     Auto-detects Claude Desktop, Claude Code, Cursor, Windsurf, and
     OpenClaw, then writes the MCP server config and injects your API
     key. Uses the absolute binary path (not npx) for reliable version
-    management. Your agent gets 4 new tools: extract_url,
-    browse_capabilities, execute_capability, and report_outcome.
+    management. Your agent gets 5 tools: extract_url,
+    browse_capabilities, execute_capability, report_outcome, and extract_content.
 
   ${bold('Docs:')} ${cyan('https://agentinternetruntime.com/docs/sdk')}
 `);
@@ -371,11 +371,12 @@ export async function runInstallSkill(flags?: string[]): Promise<void> {
   }
   console.log(dim('  Restart your agent to activate.'));
   console.log('');
-  console.log('  ' + bold('Your agent now has 4 new tools:'));
+  console.log('  ' + bold('Your agent now has 5 tools:'));
   console.log('    ' + cyan('extract_url') + '          — Extract structured data from any URL');
   console.log('    ' + cyan('browse_capabilities') + '  — Discover what actions are possible on a site');
   console.log('    ' + cyan('execute_capability') + '   — Get a step-by-step execution plan');
   console.log('    ' + cyan('report_outcome') + '       — Report results to improve collective intelligence');
+  console.log('    ' + cyan('extract_content') + '      — Extract text and sections from local or remote files');
   console.log('');
   console.log('  ' + bold('Try it:'));
   console.log('    ' + dim('"Use AIR to browse capabilities on amazon.com"'));

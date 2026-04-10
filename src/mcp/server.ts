@@ -9,6 +9,7 @@
 //   AIR_API_KEY=air_xxx air-mcp
 // ============================================================
 
+import { basename } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -105,10 +106,12 @@ export default main;
 // We detect direct invocation by checking if the resolved script path contains
 // our known entry pattern, or if --mcp was passed explicitly.
 const runningScript = process.argv[1] ?? '';
+const runningScriptName = basename(runningScript);
 const shouldAutoStart =
   runningScript.endsWith('mcp/server.js') ||
   runningScript.endsWith('mcp/server.mjs') ||
   runningScript.endsWith('mcp/server.ts') ||
+  runningScriptName === 'air-mcp' ||
   process.argv.includes('--mcp');
 
 if (shouldAutoStart) {

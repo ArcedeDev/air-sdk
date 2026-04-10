@@ -24,6 +24,7 @@ describe('AIRHttpClient', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -122,6 +123,8 @@ describe('AIRHttpClient', () => {
   // --- Timeout ---
 
   it('aborts request after timeout', async () => {
+    vi.useFakeTimers();
+
     // Make fetch hang until aborted
     fetchMock.mockImplementation((_url: string, opts: any) => {
       return new Promise((_, reject) => {
@@ -131,8 +134,14 @@ describe('AIRHttpClient', () => {
       });
     });
 
-    await expect(client.get('/slow')).rejects.toThrow('aborted');
-  }, 15_000);
+    const requestPromise = client.get('/slow');
+    const handledRejection = requestPromise.catch(err => err);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    const err = await handledRejection;
+    expect(err).toBeInstanceOf(DOMException);
+    expect((err as DOMException).message.toLowerCase()).toContain('aborted');
+  });
 
   // --- Cleanup ---
 

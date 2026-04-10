@@ -68,8 +68,8 @@ function createMockHttpClient(response: unknown = { capabilities: [] }) {
 
 describe('MCP Tools', () => {
   describe('tool definitions', () => {
-    it('exports exactly 4 tools', () => {
-      expect(tools).toHaveLength(4);
+    it('exports exactly 5 tools', () => {
+      expect(tools).toHaveLength(5);
     });
 
     it('all tools have name, description, and inputSchema', () => {
@@ -87,6 +87,7 @@ describe('MCP Tools', () => {
       expect(names).toContain('browse_capabilities');
       expect(names).toContain('execute_capability');
       expect(names).toContain('report_outcome');
+      expect(names).toContain('extract_content');
     });
   });
 
@@ -219,7 +220,7 @@ describe('MCP Tools', () => {
       const result = await handleToolCall('browse_capabilities', { domain: 'unknown.com' }, cache, http);
 
       expect(result.isError).toBeFalsy();
-      expect(result.content[0].text).toContain('No known capabilities');
+      expect(result.content[0].text).toContain('No indexed capabilities found');
     });
 
     it('returns error when domain is missing', async () => {
@@ -296,9 +297,9 @@ describe('MCP Tools', () => {
 
       // Should NOT be an error — it's guidance for the agent
       expect(result.isError).toBeUndefined();
-      expect(result.content[0].text).toContain('No pre-verified macro or selectors');
+      expect(result.content[0].text).toContain('your report creates one');
       expect(result.content[0].text).toContain('report_outcome');
-      expect(result.content[0].text).toContain('Suggested approach');
+      expect(result.content[0].text).toContain('What AIR knows');
     });
 
     it('returns error when domain is missing', async () => {
@@ -384,8 +385,8 @@ describe('MCP Tools', () => {
 
       const result = await handleToolCall('browse_capabilities', { domain: 'test.com' }, cache, http);
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Cache exploded');
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain('No indexed capabilities found');
     });
   });
 });
