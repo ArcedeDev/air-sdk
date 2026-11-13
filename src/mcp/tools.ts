@@ -1369,30 +1369,31 @@ async function handleExtractContent(
 
   // For file_url: fetch the file first, then upload to the API
   // For file_path: read from local filesystem (desktop agent context)
+  // Both paths go through file-guard: only public URLs, and only document files outside
+  // hidden directories, because whatever is read here is uploaded to the AIR API.
   let fileBlob: Blob;
   let fileName: string;
 
   if (fileUrl) {
     try {
-      const resp = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
-      if (!resp.ok) {
-        return errorResult(`Failed to fetch file from URL: ${resp.status} ${resp.statusText}`);
-      }
-      fileBlob = await resp.blob();
-      // Derive filename from URL path
-      const urlPath = new URL(fileUrl).pathname;
-      fileName = urlPath.split('/').pop() || 'document';
+      const { fetchPublicDocument } = await import('./file-guard');
+      const { blob, url } = await fetchPublicDocument(fileUrl);
+      fileBlob = blob;
+      // Derive filename from the final URL path
+      fileName = url.pathname.split('/').pop() || 'document';
     } catch (err: any) {
       return errorResult(`Failed to fetch file from URL: ${err?.message || 'Unknown error'}`);
     }
   } else {
     // Local file path — use Node.js fs (available in desktop agent runtime)
     try {
+      const { resolveLocalDocument } = await import('./file-guard');
       const { promises: fsp } = await import('fs');
       const path = await import('path');
-      const buffer = await fsp.readFile(filePath!);
+      const realPath = await resolveLocalDocument(filePath!);
+      const buffer = await fsp.readFile(realPath);
       fileBlob = new Blob([buffer]);
-      fileName = path.basename(filePath!);
+      fileName = path.basename(realPath);
     } catch (err: any) {
       return errorResult(`Failed to read local file: ${err?.message || 'Unknown error'}`);
     }
